@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="/icon.svg">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <script src="/firebase-config.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <title>Classeur TCG</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -682,7 +682,13 @@ let _ocrWorker = null;
 async function getOcrWorker() {
   if (_ocrWorker) return _ocrWorker;
   if (!window.Tesseract) throw new Error("Tesseract.js non disponible");
-  _ocrWorker = await Tesseract.createWorker(["fra", "eng"], 1, { logger: () => {} });
+  // Chemins explicites requis pour le chargement CDN sans bundler
+  _ocrWorker = await Tesseract.createWorker("eng", 1, {
+    workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js",
+    corePath:   "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.0.0/tesseract-core-simd-lstm.wasm.js",
+    langPath:   "https://tessdata.projectnaptha.com/4.0.0",
+    logger: () => {},
+  });
   return _ocrWorker;
 }
 
@@ -737,21 +743,26 @@ async function scanFiles(files) {
       const bmp = await createImageBitmap(file);
       const W = bmp.width, H = bmp.height;
 
-      // Name strip: top 12%, inner 80% width (avoids card border)
-      const nameCanvas = buildOcrCanvas(bmp, Math.round(W*0.08), Math.round(H*0.03), Math.round(W*0.72), Math.round(H*0.11), 3);
-      // Number strip: bottom 13%, center 55% (where XX/YYY sits)
-      const numCanvas  = buildOcrCanvas(bmp, Math.round(W*0.25), Math.round(H*0.855), Math.round(W*0.50), Math.round(H*0.11), 4);
+      // Name strip: top 14%, 80% width
+      const nameCanvas = buildOcrCanvas(bmp, Math.round(W*0.06), Math.round(H*0.02), Math.round(W*0.78), Math.round(H*0.13), 3);
+      // Number strip: bottom 20%, full width (large marge si la carte ne remplit pas le cadre)
+      const numCanvas  = buildOcrCanvas(bmp, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
 
       const [nameText, numText] = await Promise.all([
         ocrCanvas(worker, nameCanvas, "7"),
-        ocrCanvas(worker, numCanvas,  "7"),
+        ocrCanvas(worker, numCanvas,  "11"), // PSM 11 = texte épars, meilleur pour trouver XX/YYY parmi d'autres éléments
       ]);
 
       const name = parseOcrName(nameText);
       const { number, total } = parseOcrNumber(numText);
 
+      // Priorité : lookup direct par numéro (rapide), puis nom si rien trouvé
+      let cands = number ? await lookupCard(number, total, "") : [];
+      if (!cands.length) {
+        const det2 = { name, number, total, setCode: "", language: S.lang, variant: "normal" };
+        cands = await matchCard(det2);
+      }
       const det = { name, number, total, setCode: "", language: S.lang, variant: "normal" };
-      const cands = await matchCard(det);
       entry.found = [{ det, cands, sel: 0, added: false }];
       entry.status = "done";
     } catch(e) {
@@ -857,8 +868,11 @@ async function startVideoScan(){
     }
   });
 
-  // Initialise le worker OCR si pas encore prêt ; le scanner attend qu'il soit disponible
-  if (!_ocrWorker) getOcrWorker().catch(() => {});
+  // Initialise le worker OCR ; le badge indique le chargement pendant ce temps
+  if (!_ocrWorker) {
+    vscanBadge("Chargement de l'OCR… (~10 s la première fois)");
+    getOcrWorker().then(() => vscanBadge("Cadre la carte dans le rectangle")).catch(e => vscanBadge("OCR indisponible : " + e.message));
+  }
   VS.timer = setInterval(async () => {
     const v = document.getElementById("vscan-vid");
     if (v) await analyzeFrame(v);
@@ -878,9 +892,9 @@ async function analyzeFrame(vid){
   VS.busy = true;
   try {
     const W = vid.videoWidth, H = vid.videoHeight; if (!W) { VS.busy = false; return; }
-    // Zone numéro : bande basse 13%, centre 54%
-    const numCv = buildOcrCanvas(vid, Math.round(W*0.23), Math.round(H*0.855), Math.round(W*0.54), Math.round(H*0.115), 4);
-    await _ocrWorker.setParameters({tessedit_pageseg_mode:"7"});
+    // Zone numéro : bande basse 22%, largeur 90% — intentionnellement large
+    const numCv = buildOcrCanvas(vid, Math.round(W*0.05), Math.round(H*0.76), Math.round(W*0.90), Math.round(H*0.22), 4);
+    await _ocrWorker.setParameters({tessedit_pageseg_mode:"11"}); // texte épars
     const { data:{text} } = await _ocrWorker.recognize(numCv);
     const numTxt = text.trim();
     const {number, total} = parseOcrNumber(numTxt);
