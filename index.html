@@ -841,7 +841,10 @@ async function startVideoScan(){
   if (!totalIdx.size && S.catalog) buildTotalIndex();
   let stream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}});
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}}});
+    // Force zoom=1 pour éviter le basculement sur la caméra macro d'iPhone
+    const vtrack = stream.getVideoTracks()[0];
+    if (vtrack?.getCapabilities?.()?.zoom) vtrack.applyConstraints({advanced:[{zoom:1}]}).catch(()=>{});
   } catch(e){ toast("Caméra inaccessible : " + (e.name || e.message)); return; }
 
   const ov = document.createElement("div"); ov.id = "vscan-ov";
