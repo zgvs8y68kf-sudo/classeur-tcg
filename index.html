@@ -1011,11 +1011,9 @@ async function startVideoScan(){
     vscanBadge("Détection texte active");
     VS.textDet = new TextDetector();
   } else {
-    claudeCheck().then(ready => {
-      if (ready) vscanBadge("Pointe la carte et appuie sur 📷");
-      else if (window.Tesseract) { vscanBadge("Chargement OCR…"); getOcrWorker().then(() => vscanBadge("Loupe active — tape ou 📷")).catch(() => vscanBadge("Tape le numéro dans le champ")); }
-      else vscanBadge("Tape le numéro vu dans la loupe");
-    });
+    if (window.Tesseract) { vscanBadge("Chargement OCR…"); getOcrWorker().then(() => vscanBadge("Loupe active — tape ou 📷")).catch(() => vscanBadge("Tape le numéro dans le champ")); }
+    else vscanBadge("Tape le numéro vu dans la loupe");
+    claudeCheck();
   }
   VS.timer = setInterval(async () => { const v = document.getElementById("vscan-vid"); if (v) await analyzeFrame(v); }, 1200);
   setTimeout(() => inp.focus(), 400);
@@ -1089,26 +1087,21 @@ async function vscanCapturePhoto(){
       for (const t of texts) { const p = parseOcrNumber(t.rawValue); if (normNum(p.number)){ number = p.number; total = p.total; setCode = p.setCode; break; } }
     } catch(e){}
   }
-  // 2. Claude Vision (reconnaissance principale)
-  if (!normNum(number)) {
+  // 2. Tesseract OCR (rapide, gratuit, local)
+  if (!normNum(number) && _ocrWorker) {
+    try {
+      const numCv2 = buildOcrCanvas(frame, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
+      await _ocrWorker.setParameters({tessedit_pageseg_mode:11});
+      const { data:{text} } = await _ocrWorker.recognize(numCv2);
+      const p = parseOcrNumber(text.trim()); number = p.number; total = p.total; setCode = p.setCode;
+    } catch(e){}
+  }
+  // 3. Claude Vision (dernier recours si OCR échoue)
+  if (!normNum(number) && _claudeReady) {
     vscanBadge("Claude analyse…");
     try {
       const r = await claudeScanImage(frame);
       if (r && normNum(r.number)) { number = r.number; total = r.total || ""; setCode = r.setCode || ""; }
-    } catch(e){}
-  }
-  // 3. Tesseract (fallback si Claude indisponible)
-  if (!normNum(number) && window.Tesseract) {
-    try {
-      const _o2 = location.origin;
-      const r = await Tesseract.recognize(numCv, "eng", {
-        workerPath:    _o2 + "/tesseract/worker.min.js",
-        corePath:      _o2 + "/tesseract/tesseract-core-lstm.wasm.js",
-        langPath:      _o2 + "/tesseract/lang/",
-        workerBlobURL: false,
-        logger: ()=>{},
-      }, { pageseg_mode: "11", tessedit_char_whitelist: "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ" });
-      const p = parseOcrNumber(r.data.text.trim()); number = p.number; total = p.total; setCode = p.setCode;
     } catch(e){}
   }
 
