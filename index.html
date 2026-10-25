@@ -857,6 +857,8 @@ async function startVideoScan(){
     <div id="vscan-bottom">
       <div id="vscan-inputrow">
         <input id="vscan-q" class="search" type="search" placeholder="Numéro (136/189) ou nom de la carte…" autocomplete="off" inputmode="search" enterkeyhint="search">
+        <button class="btn" id="vscan-photo-btn" title="Prendre une photo" style="flex-shrink:0;font-size:20px;padding:0 10px">📷</button>
+        <input type="file" id="vscan-photo-in" accept="image/*" capture="environment" style="display:none">
       </div>
       <div id="vscan-results"><p class="muted" style="font-size:13px;margin:0">L'OCR remplit ce champ automatiquement — ou tape directement.</p></div>
       <div id="vscan-confirm" hidden>
@@ -881,6 +883,11 @@ async function startVideoScan(){
     if (q.length >= 2) searchTm = setTimeout(() => vscanSearch(q), 380);
   });
   inp.addEventListener("keydown", e => { if (e.key==="Enter"){ clearTimeout(searchTm); vscanSearch(inp.value.trim()); } });
+
+  ov.querySelector("#vscan-photo-btn").addEventListener("click", () => ov.querySelector("#vscan-photo-in").click());
+  ov.querySelector("#vscan-photo-in").addEventListener("change", e => {
+    const f = e.target.files[0]; e.target.value = ""; if (f) vscanCapturePhoto(f);
+  });
 
   ov.addEventListener("click", e => {
     const b = e.target.closest("[data-vscan],[data-vscard],[data-vsvar]"); if (!b) return;
@@ -953,6 +960,36 @@ async function analyzeFrame(vid){
 function vscanBadge(text){
   const b = document.getElementById("vscan-badge");
   if (b){ b.textContent = text; b.classList.toggle("found", text.includes("✓")); }
+}
+
+async function vscanCapturePhoto(file){
+  const inp = document.getElementById("vscan-q");
+  vscanBadge("Analyse de la photo…");
+  try {
+    const bmp = await createImageBitmap(file);
+    const W = bmp.width, H = bmp.height;
+    // Zone numéro : bas de la carte
+    const numCv = buildOcrCanvas(bmp, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
+    let numText = "";
+    if (window.Tesseract) {
+      // Tesseract.recognize() : API one-shot CDN, plus fiable que le worker persistant
+      const r = await Tesseract.recognize(numCv, "eng", {logger:()=>{}});
+      numText = r.data.text.trim();
+    }
+    const {number, total} = parseOcrNumber(numText);
+    const query = normNum(number) ? `${normNum(number)}${total?"/"+total:""}` : "";
+    if (query) {
+      if (inp) inp.value = query;
+      vscanSearch(query);
+      vscanBadge(`Photo : ${query} ✓`);
+    } else {
+      vscanBadge("Numéro non lu — tape-le manuellement");
+      if (inp) inp.focus();
+    }
+  } catch(e) {
+    vscanBadge("Erreur OCR — tape le numéro");
+    if (inp) inp.focus();
+  }
 }
 
 async function vscanSearch(q){
