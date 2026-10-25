@@ -2,5 +2,7 @@
   "name": "classeur-tcg",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
