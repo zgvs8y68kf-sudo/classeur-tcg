@@ -728,10 +728,17 @@ function parseOcrNumber(txt) {
   const m = txt.match(/([A-Z]{0,4}\d{1,4})\s*[\/|\\]\s*(\d{1,4})/) ||
             txt.match(/([A-Z]{2,5}\d{2,4})/) ||
             txt.match(/(\d{1,4})\s*[\/|\\]\s*(\d{1,4})/);
-  if (!m) return { number: "", total: "" };
+  if (!m) return { number: "", total: "", setCode: "" };
   const number = m[1].replace(/O/g, "0").replace(/l/g, "1").replace(/I/g, "1");
   const total = (m[2] || "").replace(/O/g, "0");
-  return { number, total };
+  // Cherche un code d'extension connu dans le texte OCR (ex: SVI, PAL, 30C…)
+  const upper = txt.toUpperCase();
+  let setCode = Object.keys(PRINT_CODE).find(c => upper.includes(c)) || "";
+  if (!setCode) {
+    const skip = new Set(["GAME","FREAK","POKE","EMON","ILLUS","TAILLE","POIDS","OKAY"]);
+    setCode = (txt.match(/\b([A-Z]{2,5})\b/g) || []).find(c => !skip.has(c)) || "";
+  }
+  return { number, total, setCode };
 }
 
 function parseOcrName(txt) {
@@ -764,15 +771,15 @@ async function scanFiles(files) {
       ]);
 
       const name = parseOcrName(nameText);
-      const { number, total } = parseOcrNumber(numText);
+      const { number, total, setCode } = parseOcrNumber(numText);
 
       // Priorité : lookup direct par numéro (rapide), puis nom si rien trouvé
-      let cands = number ? await lookupCard(number, total, "") : [];
+      let cands = number ? await lookupCard(number, total, setCode) : [];
       if (!cands.length) {
-        const det2 = { name, number, total, setCode: "", language: S.lang, variant: "normal" };
+        const det2 = { name, number, total, setCode, language: S.lang, variant: "normal" };
         cands = await matchCard(det2);
       }
-      const det = { name, number, total, setCode: "", language: S.lang, variant: "normal" };
+      const det = { name, number, total, setCode, language: S.lang, variant: "normal" };
       entry.found = [{ det, cands, sel: 0, added: false }];
       entry.status = "done";
     } catch(e) {
@@ -952,24 +959,23 @@ async function analyzeFrame(vid){
   if (!(document.getElementById("vscan-confirm")?.hidden)) return;
   const W = vid.videoWidth, H = vid.videoHeight; if (!W) return;
   VS.busy = true;
-  let number = "", total = "";
+  let number = "", total = "", setCode = "";
   try {
     if (VS.textDet) {
-      // TextDetector : ML natif navigateur (Android Chrome)
       const numCv = buildOcrCanvas(vid, Math.round(W*0.05), Math.round(H*0.76), Math.round(W*0.90), Math.round(H*0.22), 2);
       const texts = await VS.textDet.detect(numCv);
-      for (const t of texts) { const p = parseOcrNumber(t.rawValue); if (normNum(p.number)){ number = p.number; total = p.total; break; } }
+      for (const t of texts) { const p = parseOcrNumber(t.rawValue); if (normNum(p.number)){ number = p.number; total = p.total; setCode = p.setCode; break; } }
     } else if (_ocrWorker) {
       const numCv = buildOcrCanvas(vid, Math.round(W*0.05), Math.round(H*0.76), Math.round(W*0.90), Math.round(H*0.22), 4);
       await _ocrWorker.setParameters({tessedit_pageseg_mode:11});
       const { data:{text} } = await _ocrWorker.recognize(numCv);
-      const p = parseOcrNumber(text.trim()); number = p.number; total = p.total;
+      const p = parseOcrNumber(text.trim()); number = p.number; total = p.total; setCode = p.setCode;
     }
   } catch(e){}
 
   if (!normNum(number)){ VS.buffer = []; VS.busy = false; return; }
 
-  const cands = await lookupCard(number, total, "").catch(()=>[]);
+  const cands = await lookupCard(number, total, setCode).catch(()=>[]);
   if (!cands.length){ vscanBadge(`${normNum(number)}${total?"/"+total:""} — introuvable`); VS.buffer = []; VS.busy = false; return; }
 
   const topId = cands[0].id;
@@ -978,7 +984,7 @@ async function analyzeFrame(vid){
   if (conf >= 3){
     const query = `${normNum(number)}${total?"/"+total:""}`;
     const inp = document.getElementById("vscan-q");
-    if (inp && inp.value !== query){ inp.value = query; vscanSearch(query); }
+    if (inp && inp.value !== query){ inp.value = query; vscanSearch(query, setCode); }
     vscanBadge(`${query} ✓`);
   } else {
     vscanBadge(`${normNum(number)}${total?"/"+total:""} — ${conf}/3`);
@@ -1000,12 +1006,12 @@ async function vscanCapturePhoto(){
   frame.getContext("2d").drawImage(vid, 0, 0);
   const numCv = buildOcrCanvas(frame, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
 
-  let number = "", total = "";
+  let number = "", total = "", setCode = "";
   // 1. TextDetector natif (Android Chrome)
   if (VS.textDet) {
     try {
       const texts = await VS.textDet.detect(numCv);
-      for (const t of texts) { const p = parseOcrNumber(t.rawValue); if (normNum(p.number)){ number = p.number; total = p.total; break; } }
+      for (const t of texts) { const p = parseOcrNumber(t.rawValue); if (normNum(p.number)){ number = p.number; total = p.total; setCode = p.setCode; break; } }
     } catch(e){}
   }
   // 2. Tesseract one-shot (fallback)
@@ -1019,20 +1025,20 @@ async function vscanCapturePhoto(){
         workerBlobURL: false,
         logger: ()=>{},
       }, { pageseg_mode: "11", tessedit_char_whitelist: "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ" });
-      const p = parseOcrNumber(r.data.text.trim()); number = p.number; total = p.total;
+      const p = parseOcrNumber(r.data.text.trim()); number = p.number; total = p.total; setCode = p.setCode;
     } catch(e){}
   }
 
   const inp = document.getElementById("vscan-q");
   if (normNum(number)) {
     const query = `${normNum(number)}${total?"/"+total:""}`;
-    if (inp) inp.value = query; vscanSearch(query); vscanBadge(`${query} ✓`);
+    if (inp) inp.value = query; vscanSearch(query, setCode); vscanBadge(`${query} ✓`);
   } else {
     vscanBadge("Non reconnu — tape le numéro vu dans la loupe"); if (inp) inp.focus();
   }
 }
 
-async function vscanSearch(q){
+async function vscanSearch(q, codeHint = ""){
   if (!q) return;
   const resDiv = document.getElementById("vscan-results"); if (!resDiv) return;
   resDiv.innerHTML = `<p class="muted" style="font-size:13px;margin:0">Recherche…</p>`;
@@ -1041,8 +1047,8 @@ async function vscanSearch(q){
 
   let cands = [];
   const numM = q.match(/^0*(\d+)\s*[\/\-]\s*(\d+)$/);
-  if (numM) cands = await lookupCard(numM[1], numM[2], "");
-  if (!cands.length) cands = await matchCard({name:q, number:numM?.[1]||"", total:numM?.[2]||"", setCode:"", language:S.lang, variant:"normal"});
+  if (numM) cands = await lookupCard(numM[1], numM[2], codeHint);
+  if (!cands.length) cands = await matchCard({name:q, number:numM?.[1]||"", total:numM?.[2]||"", setCode:codeHint, language:S.lang, variant:"normal"});
 
   VS.currentCands = cands;
   if (!cands.length){ resDiv.innerHTML=`<p class="muted" style="font-size:13px;margin:0">Aucun résultat — essaie un autre numéro ou nom.</p>`; return; }
