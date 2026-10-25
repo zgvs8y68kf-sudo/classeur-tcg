@@ -694,8 +694,8 @@ async function getOcrWorker() {
   });
   // Restreindre aux chiffres et "/" — réduit les faux positifs
   await _ocrWorker.setParameters({
-    tessedit_pageseg_mode: "7",
-    tessedit_char_whitelist: "0123456789/",
+    tessedit_pageseg_mode: "11",
+    tessedit_char_whitelist: "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ",
   });
   return _ocrWorker;
 }
@@ -1014,7 +1014,7 @@ async function vscanCapturePhoto(){
         corePath:   "/tesseract/tesseract-core-lstm.wasm.js",
         langPath:   "/tesseract/lang/",
         logger: ()=>{},
-      }, { pageseg_mode: "7", tessedit_char_whitelist: "0123456789/" });
+      }, { pageseg_mode: "11", tessedit_char_whitelist: "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ" });
       const p = parseOcrNumber(r.data.text.trim()); number = p.number; total = p.total;
     } catch(e){}
   }
