@@ -541,7 +541,7 @@ function viewScan(){
       ${f.cands.length ? `<div class="cand">${f.cands.slice(0,12).map((c,ci) => `<button data-pick="${i}:${k}:${ci}" aria-pressed="${f.sel===ci}"><img src="${esc(c.image ? c.image+"/low.webp" : "")}" alt="" loading="lazy"><small>${esc(S.catalog?.sets?.[c.setId]?.name || c.setId)}</small></button>`).join("")}</div>
       <div class="row"><select id="var-${i}-${k}" class="chip" aria-label="Variante">${VARIANTS.map(([v,l]) => `<option value="${v}" ${f.det.variant===v?"selected":""}>${l}</option>`).join("")}</select>
       <button class="btn primary" data-addscan="${i}:${k}">${f.added ? "Ajouter un exemplaire de plus" : "Ajouter au classeur"}</button></div>`
-      : `<p class="muted" style="margin:6px 0">Pas trouvée automatiquement. <button class="btn" data-act="tosearch" data-q="${esc(f.det.name||"")}">Chercher « ${esc(f.det.name||"")} »</button></p>`}
+      : `<p class="muted" style="margin:6px 0">Pas trouvée automatiquement${f.det.number ? ` (${esc(f.det.number)}${f.det.total?"/"+esc(f.det.total):""} ${esc(f.det.setCode||"")})` : ""}. <button class="btn" data-act="tosearch" data-q="${esc(f.det.name||f.det.number||"")}">Chercher</button></p>`}
     </div>`).join("") || `<div class="det">Photo ${i+1} : aucune carte détectée.</div>`;
   }).join("");
   return `
@@ -753,10 +753,12 @@ function parseOcrName(txt) {
 
 /* ---- Claude Vision scan (api/scan.js côté serveur) ---- */
 let _claudeReady = null;
+let _claudeCheckedAt = 0;
 async function claudeCheck() {
-  if (_claudeReady !== null) return _claudeReady;
+  if (_claudeReady && Date.now() - _claudeCheckedAt < 120_000) return _claudeReady;
   try { const r = await fetch("/api/scan"); _claudeReady = (await r.json()).ready === true; }
   catch { _claudeReady = false; }
+  _claudeCheckedAt = Date.now();
   return _claudeReady;
 }
 
@@ -798,7 +800,11 @@ async function scanFiles(files) {
       if (useCloud) {
         // Claude Vision : envoie la photo complète
         const r = await claudeScanImage(file);
-        if (r) { number = r.number || ""; total = r.total || ""; setCode = r.setCode || ""; name = r.name || ""; }
+        if (r) {
+          number = r.number || ""; total = r.total || ""; setCode = r.setCode || ""; name = r.name || "";
+          const info = [name, number && (number + (total ? "/"+total : "")), setCode].filter(Boolean).join(" · ");
+          if (info) toast("Claude : " + info); else toast("Claude : rien détecté — mauvaise photo ?");
+        } else { toast("Claude indisponible ou erreur réseau"); }
       } else {
         // Tesseract : crop nom (haut) + numéro (bas)
         const bmp = await createImageBitmap(file);
