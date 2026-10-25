@@ -750,30 +750,68 @@ function parseOcrName(txt) {
     .slice(0, 50);
 }
 
+/* ---- Claude Vision scan (api/scan.js côté serveur) ---- */
+let _claudeReady = null;
+async function claudeCheck() {
+  if (_claudeReady !== null) return _claudeReady;
+  try { const r = await fetch("/api/scan"); _claudeReady = (await r.json()).ready === true; }
+  catch { _claudeReady = false; }
+  return _claudeReady;
+}
+
+async function claudeScanImage(source) {
+  if (!await claudeCheck()) return null;
+  const MAX = 1400;
+  const cv = document.createElement("canvas");
+  if (source instanceof HTMLCanvasElement) {
+    const s = Math.min(1, MAX / Math.max(source.width, source.height));
+    cv.width = Math.round(source.width * s); cv.height = Math.round(source.height * s);
+    cv.getContext("2d").drawImage(source, 0, 0, cv.width, cv.height);
+  } else {
+    const bmp = await createImageBitmap(source);
+    const s = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+    cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
+    cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+  }
+  const b64 = cv.toDataURL("image/jpeg", 0.88).split(",")[1];
+  try {
+    const r = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: "image/jpeg" }) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.error ? null : d;
+  } catch { return null; }
+}
+
 async function scanFiles(files) {
-  let worker;
-  try { worker = await getOcrWorker(); } catch(e) { toast("Tesseract.js non chargé — réessaie dans un instant."); return; }
+  const useCloud = await claudeCheck();
+  let worker = null;
+  if (!useCloud) {
+    try { worker = await getOcrWorker(); } catch(e) { toast("Tesseract.js non chargé — réessaie dans un instant."); return; }
+  }
 
   for (const file of files) {
     const entry = { status: "busy", found: [] }; S.scan.unshift(entry); render();
     try {
-      const bmp = await createImageBitmap(file);
-      const W = bmp.width, H = bmp.height;
+      let name = "", number = "", total = "", setCode = "";
 
-      // Name strip: top 14%, 80% width
-      const nameCanvas = buildOcrCanvas(bmp, Math.round(W*0.06), Math.round(H*0.02), Math.round(W*0.78), Math.round(H*0.13), 3);
-      // Number strip: bottom 20%, full width (large marge si la carte ne remplit pas le cadre)
-      const numCanvas  = buildOcrCanvas(bmp, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
+      if (useCloud) {
+        // Claude Vision : envoie la photo complète
+        const r = await claudeScanImage(file);
+        if (r) { number = r.number || ""; total = r.total || ""; setCode = r.setCode || ""; name = r.name || ""; }
+      } else {
+        // Tesseract : crop nom (haut) + numéro (bas)
+        const bmp = await createImageBitmap(file);
+        const W = bmp.width, H = bmp.height;
+        const nameCanvas = buildOcrCanvas(bmp, Math.round(W*0.06), Math.round(H*0.02), Math.round(W*0.78), Math.round(H*0.13), 3);
+        const numCanvas  = buildOcrCanvas(bmp, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
+        const [nameText, numText] = await Promise.all([
+          ocrCanvas(worker, nameCanvas, "7"),
+          ocrCanvas(worker, numCanvas,  "11"),
+        ]);
+        name = parseOcrName(nameText);
+        const p = parseOcrNumber(numText); number = p.number; total = p.total; setCode = p.setCode;
+      }
 
-      const [nameText, numText] = await Promise.all([
-        ocrCanvas(worker, nameCanvas, "7"),
-        ocrCanvas(worker, numCanvas,  "11"), // PSM 11 = texte épars, meilleur pour trouver XX/YYY parmi d'autres éléments
-      ]);
-
-      const name = parseOcrName(nameText);
-      const { number, total, setCode } = parseOcrNumber(numText);
-
-      // Priorité : lookup direct par numéro (rapide), puis nom si rien trouvé
       let cands = number ? await lookupCard(number, total, setCode) : [];
       if (!cands.length) {
         const det2 = { name, number, total, setCode, language: S.lang, variant: "normal" };
@@ -784,7 +822,7 @@ async function scanFiles(files) {
       entry.status = "done";
     } catch(e) {
       entry.status = "error";
-      entry.msg = "analyse OCR impossible (" + (e?.message || "erreur") + ").";
+      entry.msg = "analyse impossible (" + (e?.message || "erreur") + ").";
     }
     render();
   }
@@ -936,11 +974,12 @@ async function startVideoScan(){
   if ('TextDetector' in window) {
     vscanBadge("Détection texte active");
     VS.textDet = new TextDetector();
-  } else if (window.Tesseract) {
-    vscanBadge("Chargement OCR…");
-    getOcrWorker().then(() => vscanBadge("Loupe active — tape ou 📷")).catch(() => vscanBadge("Tape le numéro dans le champ"));
   } else {
-    vscanBadge("Tape le numéro vu dans la loupe");
+    claudeCheck().then(ready => {
+      if (ready) vscanBadge("Pointe la carte et appuie sur 📷");
+      else if (window.Tesseract) { vscanBadge("Chargement OCR…"); getOcrWorker().then(() => vscanBadge("Loupe active — tape ou 📷")).catch(() => vscanBadge("Tape le numéro dans le champ")); }
+      else vscanBadge("Tape le numéro vu dans la loupe");
+    });
   }
   VS.timer = setInterval(async () => { const v = document.getElementById("vscan-vid"); if (v) await analyzeFrame(v); }, 1200);
   setTimeout(() => inp.focus(), 400);
@@ -1014,7 +1053,15 @@ async function vscanCapturePhoto(){
       for (const t of texts) { const p = parseOcrNumber(t.rawValue); if (normNum(p.number)){ number = p.number; total = p.total; setCode = p.setCode; break; } }
     } catch(e){}
   }
-  // 2. Tesseract one-shot (fallback)
+  // 2. Claude Vision (reconnaissance principale)
+  if (!normNum(number)) {
+    vscanBadge("Claude analyse…");
+    try {
+      const r = await claudeScanImage(frame);
+      if (r && normNum(r.number)) { number = r.number; total = r.total || ""; setCode = r.setCode || ""; }
+    } catch(e){}
+  }
+  // 3. Tesseract (fallback si Claude indisponible)
   if (!normNum(number) && window.Tesseract) {
     try {
       const _o2 = location.origin;
