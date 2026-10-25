@@ -996,8 +996,10 @@ async function startVideoScan(){
     }
     if (b.dataset.vscard != null) {
       VS.currentSel = +b.dataset.vscard;
-      ov.querySelectorAll("[data-vscard]").forEach(x => x.setAttribute("aria-pressed", x.dataset.vscard == VS.currentSel));
-      document.getElementById("vscan-confirm").hidden = false; return;
+      if (window._vsAutoAdd) { clearInterval(window._vsAutoAdd); window._vsAutoAdd = null; }
+      const rd = document.getElementById("vscan-results");
+      if (VS.currentCands?.[VS.currentSel]) _vscanDoAdd(VS.currentCands[VS.currentSel], rd);
+      return;
     }
     if (b.dataset.vsvar) {
       VS.currentVariant = b.dataset.vsvar;
@@ -1131,6 +1133,7 @@ async function vscanSearch(q, codeHint = ""){
   const resDiv = document.getElementById("vscan-results"); if (!resDiv) return;
   resDiv.innerHTML = `<p class="muted" style="font-size:13px;margin:0">Recherche…</p>`;
   VS.currentCands = null;
+  if (window._vsAutoAdd) { clearInterval(window._vsAutoAdd); window._vsAutoAdd = null; }
   const cf = document.getElementById("vscan-confirm"); if (cf) cf.hidden = true;
 
   let cands = [];
@@ -1141,23 +1144,49 @@ async function vscanSearch(q, codeHint = ""){
   VS.currentCands = cands;
   if (!cands.length){ resDiv.innerHTML=`<p class="muted" style="font-size:13px;margin:0">Aucun résultat — essaie un autre numéro ou nom.</p>`; return; }
   const sn = id => S.catalog?.sets?.[id]?.name?.slice(0,14) || id;
-  resDiv.innerHTML = `<div class="vscard-grid">${cands.slice(0,18).map((c,i)=>`<button class="vscard" data-vscard="${i}" aria-pressed="false">${c.image?`<img src="${esc(c.image)}/low.webp" alt="" loading="lazy">`:`<span style="font-size:9px;padding:3px;text-align:center;word-break:break-word;color:var(--muted)">${esc(c.name)}</span>`}<small>${esc(sn(c.setId))} ${esc(c.localId)}</small></button>`).join("")}</div>`;
+
+  if (cands.length === 1) {
+    _vscanDoAdd(cands[0], resDiv);
+  } else {
+    VS.currentSel = 0;
+    let t = 3;
+    const renderPicker = () => {
+      if (!resDiv.isConnected) return;
+      resDiv.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Quelle édition ? <span id="vscan-cd" style="font-weight:700;color:var(--accent)">${t}s</span> → ajout auto</div><div class="vscard-grid">${cands.slice(0,8).map((c,i)=>`<button class="vscard" data-vscard="${i}" aria-pressed="${i===0}">${c.image?`<img src="${esc(c.image)}/low.webp" alt="" loading="lazy">`:`<span style="font-size:9px;padding:3px;text-align:center;word-break:break-word;color:var(--muted)">${esc(c.name)}</span>`}<small>${esc(sn(c.setId))} ${esc(c.localId)}</small></button>`).join("")}</div>`;
+    };
+    renderPicker();
+    window._vsAutoAdd = setInterval(() => {
+      t--;
+      const ct = document.getElementById("vscan-cd");
+      if (ct) ct.textContent = `${t}s`;
+      if (t <= 0) {
+        clearInterval(window._vsAutoAdd); window._vsAutoAdd = null;
+        if (resDiv.isConnected) _vscanDoAdd(cands[VS.currentSel], resDiv);
+      }
+    }, 1000);
+  }
+}
+
+function _vscanDoAdd(c, resDiv) {
+  if (window._vsAutoAdd) { clearInterval(window._vsAutoAdd); window._vsAutoAdd = null; }
+  const variant = VS.currentVariant || "normal";
+  const doc = S.coll[c.id] ? {...S.coll[c.id]} : {kind:"card",cardId:c.id,setId:c.setId,name:c.name,localId:c.localId,image:c.image||"",v:{},cond:"Near Mint",wish:false,addedAt:Date.now(),lang:S.lang.toUpperCase().slice(0,2)};
+  doc.v = {...doc.v,[variant]:(doc.v?.[variant]||0)+1}; doc.wish = false;
+  Store.save(doc); toast(`${c.name} ajoutée (×${qty(doc)})`);
+  if (!doc.prices) loadCard(c.id).then(cd=>{if(!cd?.pricing)return;const prices={};for(const[vk]of VARIANTS)prices[vk]=priceOf(cd.pricing,vk).main;const cur=S.coll[c.id];if(cur)Store.save({...cur,prices,priceSource:"Cardmarket via TCGdex",priceAt:Date.now()});}).catch(()=>{});
+  VS.currentCands=null; VS.currentSel=0; VS.currentVariant="normal"; VS.buffer=[];
+  document.getElementById("vscan-vars")?.querySelectorAll("[data-vsvar]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.vsvar==="normal"));
+  const inp=document.getElementById("vscan-q"); if(inp) inp.value="";
+  const cf=document.getElementById("vscan-confirm"); if(cf) cf.hidden=true;
+  const sn = id => S.catalog?.sets?.[id]?.name?.slice(0,14) || id;
+  if (resDiv?.isConnected) resDiv.innerHTML=`<div style="font-size:13px;color:var(--text);padding:2px 0">✅ <b>${esc(c.name)}</b> <span style="color:var(--muted);font-size:11px">${esc(sn(c.setId))}</span><br><span style="font-size:11px;color:var(--muted)">Pointe la carte suivante.</span></div>`;
+  vscanBadge("✓ " + c.name.slice(0,20));
+  setTimeout(()=>vscanBadge("Pointe le bas de la carte"),2500);
 }
 
 async function vscanAdd(){
   const cands = VS.currentCands; if (!cands?.length) return;
-  const c = cands[Math.min(VS.currentSel, cands.length-1)];
-  const variant = VS.currentVariant || "normal";
-  const doc = S.coll[c.id] ? {...S.coll[c.id]} : {kind:"card",cardId:c.id,setId:c.setId,name:c.name,localId:c.localId,image:c.image||"",v:{},cond:"Near Mint",wish:false,addedAt:Date.now(),lang:S.lang.toUpperCase().slice(0,2)};
-  doc.v = {...doc.v, [variant]:(doc.v?.[variant]||0)+1}; doc.wish = false;
-  Store.save(doc); toast(`${c.name} ajoutée (×${qty(doc)})`);
-  if (!doc.prices) loadCard(c.id).then(cd => { if (!cd?.pricing) return; const prices = {}; for (const [vk] of VARIANTS) prices[vk] = priceOf(cd.pricing,vk).main; const cur = S.coll[c.id]; if (cur) Store.save({...cur,prices,priceSource:"Cardmarket via TCGdex",priceAt:Date.now()}); }).catch(()=>{});
-  VS.currentCands = null; VS.currentSel = 0; VS.currentVariant = "normal"; VS.buffer = [];
-  document.getElementById("vscan-vars")?.querySelectorAll("[data-vsvar]").forEach(b => b.setAttribute("aria-pressed", b.dataset.vsvar==="normal"));
-  const inp = document.getElementById("vscan-q"); if (inp){ inp.value = ""; inp.focus(); }
-  const resDiv = document.getElementById("vscan-results"); if (resDiv) resDiv.innerHTML=`<p class="muted" style="font-size:13px;margin:0">✓ Ajoutée ! Pointe ou tape la carte suivante.</p>`;
-  const cf = document.getElementById("vscan-confirm"); if (cf) cf.hidden = true;
-  vscanBadge("Pointe le bas de la carte");
+  _vscanDoAdd(cands[Math.min(VS.currentSel, cands.length-1)], document.getElementById("vscan-results"));
 }
 
 /* ---------- export ---------- */
