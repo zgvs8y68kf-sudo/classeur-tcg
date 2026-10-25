@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diagnostic OCR — Tesseract.js local</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:640px;margin:0 auto;padding:16px;background:#f5f5f5}
+h1{font-size:18px;margin:0 0 16px}
+.card{background:#fff;border-radius:10px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+button{background:#0070f3;color:#fff;border:none;border-radius:6px;padding:10px 18px;font-size:15px;cursor:pointer;margin:4px 4px 4px 0}
+button:disabled{background:#999}
+input[type=file]{font-size:14px;margin:8px 0;display:block}
+pre{background:#1a1a2e;color:#0f0;padding:12px;border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:8px 0 0}
+.ok{color:#16a34a;font-weight:600} .err{color:#dc2626;font-weight:600} .warn{color:#d97706;font-weight:600}
+canvas{border:1px solid #ddd;border-radius:6px;max-width:100%;display:block;margin:6px 0}
+img{max-width:200px;border-radius:6px;display:block;margin:6px 0}
+#status{font-size:13px;padding:6px 10px;border-radius:6px;background:#e8f4fd;margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<h1>Diagnostic OCR — Tesseract.js (fichiers locaux)</h1>
+
+<div id="status">Chargement du script Tesseract…</div>
+
+<!-- ① Vérification du chargement du script -->
+<div class="card">
+  <b>1. Chargement du script</b>
+  <pre id="log-load">En attente…</pre>
+</div>
+
+<!-- ② Test image synthétique -->
+<div class="card">
+  <b>2. Test image synthétique — "136/189"</b>
+  <canvas id="test-canvas" width="400" height="60"></canvas>
+  <button id="btn-synth" disabled>Lancer OCR sur image synthétique</button>
+  <pre id="log-synth">En attente…</pre>
+</div>
+
+<!-- ③ Test photo réelle -->
+<div class="card">
+  <b>3. Test sur photo de carte Pokémon</b>
+  <input type="file" id="photo-input" accept="image/*">
+  <img id="photo-preview" hidden>
+  <canvas id="photo-canvas" hidden></canvas>
+  <button id="btn-photo" disabled>Lancer OCR sur la photo</button>
+  <pre id="log-photo">Choisis une photo d'abord.</pre>
+</div>
+
+<script src="/tesseract/tesseract.min.js"></script>
+<script>
+const log = (id, msg) => { document.getElementById(id).textContent = msg; };
+const status = msg => { document.getElementById('status').textContent = msg; };
+
+// ① Vérification chargement
+(function checkLoad(){
+  if (typeof Tesseract === 'undefined') {
+    log('log-load', '❌ ERREUR : window.Tesseract n\'est pas défini.\nLe script /tesseract/tesseract.min.js n\'a pas pu être chargé.');
+    status('❌ Script non chargé');
+    return;
+  }
+  log('log-load', '✅ window.Tesseract défini\nVersion : ' + (Tesseract.version || '(inconnue)') +
+    '\ncreateWorker : ' + (typeof Tesseract.createWorker) +
+    '\nrecognize : ' + (typeof Tesseract.recognize));
+  status('✅ Script chargé — prêt à tester');
+  document.getElementById('btn-synth').disabled = false;
+  document.getElementById('btn-photo').disabled = false;
+
+  // Dessiner l'image de test synthétique
+  const cv = document.getElementById('test-canvas');
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,400,60);
+  ctx.fillStyle = '#000'; ctx.font = 'bold 32px monospace';
+  ctx.fillText('136/189', 80, 42);
+})();
+
+// Créer un worker Tesseract avec les chemins locaux
+async function makeWorker(logId) {
+  log(logId, '⏳ Création du worker…\n  workerPath = /tesseract/worker.min.js\n  corePath   = /tesseract/tesseract-core-lstm.wasm.js\n  langPath   = /tesseract/lang/');
+  const t0 = Date.now();
+  const worker = await Tesseract.createWorker('eng', 1, {
+    workerPath: '/tesseract/worker.min.js',
+    corePath:   '/tesseract/tesseract-core-lstm.wasm.js',
+    langPath:   '/tesseract/lang/',
+    logger: m => {
+      const cur = document.getElementById(logId).textContent;
+      document.getElementById(logId).textContent = cur + '\n[' + m.status + '] ' + Math.round((m.progress||0)*100) + '%';
+    },
+  });
+  const elapsed = ((Date.now()-t0)/1000).toFixed(1);
+  log(logId, document.getElementById(logId).textContent + '\n✅ Worker prêt en ' + elapsed + 's');
+  return worker;
+}
+
+// ② Test synthétique
+document.getElementById('btn-synth').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-synth'); btn.disabled = true;
+  try {
+    const worker = await makeWorker('log-synth');
+    await worker.setParameters({
+      tessedit_pageseg_mode: '7',       // single line
+      tessedit_char_whitelist: '0123456789/',
+    });
+    const cv = document.getElementById('test-canvas');
+    const t1 = Date.now();
+    const { data } = await worker.recognize(cv);
+    const elapsed = Date.now()-t1;
+    const cur = document.getElementById('log-synth').textContent;
+    document.getElementById('log-synth').textContent = cur +
+      '\n\n📝 Texte brut : "' + data.text.trim() + '"' +
+      '\n⏱ Temps OCR : ' + elapsed + ' ms' +
+      '\n🎯 Confiance : ' + Math.round(data.confidence) + '%' +
+      (data.text.trim().includes('136/189') || data.text.trim().includes('136') ? '\n✅ SUCCÈS — numéro trouvé' : '\n⚠️ Numéro non trouvé dans le résultat');
+    await worker.terminate();
+  } catch(e) {
+    log('log-synth', document.getElementById('log-synth').textContent + '\n❌ ERREUR : ' + e.message + '\nStack : ' + e.stack);
+  }
+  btn.disabled = false;
+});
+
+// ③ Photo réelle
+const photoInput = document.getElementById('photo-input');
+photoInput.addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = document.getElementById('photo-preview');
+  img.src = url; img.hidden = false;
+  log('log-photo', 'Photo chargée : ' + file.name + ' (' + (file.size/1024).toFixed(0) + ' Ko)\nClique sur "Lancer OCR".');
+});
+
+document.getElementById('btn-photo').addEventListener('click', async () => {
+  const img = document.getElementById('photo-preview');
+  if (img.hidden || !img.src) { log('log-photo', '⚠️ Charge une photo d\'abord.'); return; }
+  const btn = document.getElementById('btn-photo'); btn.disabled = true;
+
+  try {
+    const worker = await makeWorker('log-photo');
+
+    // Zone numéro : bas de la carte (80–100% hauteur, 5–95% largeur), agrandissement ×4
+    const bmp = await createImageBitmap(img);
+    const W = bmp.width, H = bmp.height;
+    const rx = Math.round(W*0.05), ry = Math.round(H*0.78);
+    const rw = Math.round(W*0.90), rh = Math.round(H*0.20);
+    const scale = 4;
+    const cv = document.getElementById('photo-canvas');
+    cv.width = rw*scale; cv.height = rh*scale; cv.hidden = false;
+    const ctx = cv.getContext('2d');
+    // Agrandissement
+    ctx.drawImage(bmp, rx, ry, rw, rh, 0, 0, cv.width, cv.height);
+    // Contraste : niveaux de gris + boost
+    const id = ctx.getImageData(0,0,cv.width,cv.height);
+    for (let i=0;i<id.data.length;i+=4){
+      const g = Math.min(255, (0.299*id.data[i]+0.587*id.data[i+1]+0.114*id.data[i+2]-128)*2+128);
+      id.data[i]=id.data[i+1]=id.data[i+2]=g;
+    }
+    ctx.putImageData(id,0,0);
+
+    await worker.setParameters({
+      tessedit_pageseg_mode: '7',
+      tessedit_char_whitelist: '0123456789/',
+    });
+
+    const t1 = Date.now();
+    const { data } = await worker.recognize(cv);
+    const elapsed = Date.now()-t1;
+    const cur = document.getElementById('log-photo').textContent;
+    document.getElementById('log-photo').textContent = cur +
+      '\n\n🔲 Zone extraite : x=' + rx + ' y=' + ry + ' w=' + rw + ' h=' + rh + ' (×' + scale + ')' +
+      '\n📝 Texte brut : "' + data.text.trim() + '"' +
+      '\n⏱ Temps OCR : ' + elapsed + ' ms' +
+      '\n🎯 Confiance : ' + Math.round(data.confidence) + '%';
+    await worker.terminate();
+  } catch(e) {
+    log('log-photo', document.getElementById('log-photo').textContent + '\n❌ ERREUR : ' + e.message);
+  }
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>

@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="/icon.svg">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <script src="/firebase-config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="/tesseract/tesseract.min.js"></script>
 <title>Classeur TCG</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -686,8 +686,17 @@ let _ocrWorker = null;
 async function getOcrWorker() {
   if (_ocrWorker) return _ocrWorker;
   if (!window.Tesseract) throw new Error("Tesseract.js non disponible");
-  // Pas de chemins explicites : Tesseract.js déduit les URLs depuis son propre <script src>
-  _ocrWorker = await Tesseract.createWorker("eng", 1, { logger: () => {} });
+  _ocrWorker = await Tesseract.createWorker("eng", 1, {
+    workerPath: "/tesseract/worker.min.js",
+    corePath:   "/tesseract/tesseract-core-lstm.wasm.js",
+    langPath:   "/tesseract/lang/",
+    logger: () => {},
+  });
+  // Restreindre aux chiffres et "/" — réduit les faux positifs
+  await _ocrWorker.setParameters({
+    tessedit_pageseg_mode: "7",
+    tessedit_char_whitelist: "0123456789/",
+  });
   return _ocrWorker;
 }
 
@@ -1000,7 +1009,12 @@ async function vscanCapturePhoto(){
   // 2. Tesseract one-shot (fallback)
   if (!normNum(number) && window.Tesseract) {
     try {
-      const r = await Tesseract.recognize(numCv, "eng", {logger:()=>{}});
+      const r = await Tesseract.recognize(numCv, "eng", {
+        workerPath: "/tesseract/worker.min.js",
+        corePath:   "/tesseract/tesseract-core-lstm.wasm.js",
+        langPath:   "/tesseract/lang/",
+        logger: ()=>{},
+      }, { pageseg_mode: "7", tessedit_char_whitelist: "0123456789/" });
       const p = parseOcrNumber(r.data.text.trim()); number = p.number; total = p.total;
     } catch(e){}
   }
