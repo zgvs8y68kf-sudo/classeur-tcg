@@ -204,6 +204,7 @@ nav.tabs .scan .orb svg{width:26px;height:26px}
   <button data-tab="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.4-9.3-9A5 5 0 0 1 12 6a5 5 0 0 1 9.3 6c-2.3 4.6-9.3 9-9.3 9z"/></svg>Listes</button>
 </nav>
 <input type="file" id="photo" accept="image/*" capture="environment" multiple hidden>
+<input type="file" id="photo-gallery" accept="image/*" multiple hidden>
 
 <script>
 "use strict";
@@ -549,7 +550,7 @@ function viewScan(){
     <b style="font-size:16px">Scanner une carte Pokémon</b>
     <span class="muted" style="font-size:13px;max-width:36em">Pointe la caméra vers le bas de la carte (numéro + code extension). L'identification est automatique et locale — aucun service payant.</span>
     <button class="btn primary" data-act="startvideo" style="font-size:16px;padding:14px 28px">▶ Démarrer le scanner</button>
-    <button class="btn" data-act="photo" style="font-size:13px;margin-top:4px">Ou choisir des photos</button>
+    <button class="btn" data-act="gallery" style="font-size:13px;margin-top:4px">🖼 Depuis la galerie</button>
   </div>
   <div style="margin-top:14px">${rows}</div>
   ${S.scan.length ? `<button class="btn" data-act="clearscan">Vider les résultats</button>` : `<p class="muted" style="font-size:13px;margin-top:14px">Astuce : tiens la carte sous une bonne lumière, fond neutre, sans reflet sur le numéro en bas à droite.</p>`}`;
@@ -911,6 +912,7 @@ async function startVideoScan(){
       <div id="vscan-inputrow">
         <input id="vscan-q" class="search" type="search" placeholder="Numéro (136/189) ou nom de la carte…" autocomplete="off" inputmode="search" enterkeyhint="search">
         <button class="btn" id="vscan-photo-btn" title="Capturer ce cadre" style="flex-shrink:0;font-size:20px;padding:0 10px">📷</button>
+        <button class="btn" id="vscan-gallery-btn" title="Depuis la galerie" style="flex-shrink:0;font-size:20px;padding:0 10px">🖼</button>
       </div>
       <div id="vscan-results"><p class="muted" style="font-size:13px;margin:0">Lis le numéro dans la loupe ci-dessus et tape-le — ou appuie sur 📷 pour tenter la reconnaissance.</p></div>
       <div id="vscan-confirm" hidden>
@@ -937,6 +939,7 @@ async function startVideoScan(){
   inp.addEventListener("keydown", e => { if (e.key==="Enter"){ clearTimeout(searchTm); vscanSearch(inp.value.trim()); } });
 
   ov.querySelector("#vscan-photo-btn").addEventListener("click", vscanCapturePhoto);
+  ov.querySelector("#vscan-gallery-btn").addEventListener("click", () => { stopVideoScan(); setTimeout(() => $("#photo-gallery").click(), 50); });
 
   ov.addEventListener("click", e => {
     const b = e.target.closest("[data-vscan],[data-vscard],[data-vsvar]"); if (!b) return;
@@ -1157,6 +1160,7 @@ document.addEventListener("click", e => {
   if (act === "scan") return go("scan");
   if (act === "startvideo") return startVideoScan();
   if (act === "photo") return $("#photo").click();
+  if (act === "gallery") return $("#photo-gallery").click();
   if (act === "clearscan") { S.scan = []; return render(); }
   if (act === "refresh") return refreshPrices(b);
   if (act === "export") return exportCsv();
@@ -1166,6 +1170,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("input", e => { if (e.target.id === "q") { clearTimeout(searchTimer); const v = e.target.value.trim(); searchTimer = setTimeout(() => doSearch(v), 350); } });
 $("#photo").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) scanFiles(files); });
+$("#photo-gallery").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) scanFiles(files); });
 
 render();
 loadCatalog();
