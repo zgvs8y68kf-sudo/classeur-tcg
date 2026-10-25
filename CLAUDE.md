@@ -3,7 +3,7 @@
 App web de gestion de collection de cartes Pokémon pour Thomas. Interface en français, mobile d'abord.
 
 ## Fonctions en place
-- **Scan photo** : une photo d'une carte ou d'une page de classeur (jusqu'à 9 cartes). `api/scan.js` envoie l'image à Claude, qui renvoie nom, numéro (ex. 136/189), code d'extension, langue et variante. L'app cherche ensuite les candidats dans TCGdex et l'utilisateur valide la bonne édition.
+- **Scan photo** : une photo d'une carte. Tesseract.js (OCR local, navigateur) lit le nom (haut) et le numéro (bas, ex. 136/189). L'app cherche ensuite les candidats dans TCGdex et l'utilisateur valide la bonne édition. Aucun appel externe payant.
 - **Séries → extensions** avec barre de complétion. Vue classeur : cartes manquantes en gris, badge ×2/×3 pour les doubles, filtres Toutes / Possédées / Manquantes / Doubles.
 - **Fiche carte** : grande image, cotes Cardmarket (tendance, moyennes 7 et 30 j, prix bas, reverse/holo), TCGplayer, liens Cardmarket / eBay ventes réussies / eBay en vente.
 - **Quantités par variante** : normale, reverse, holo, 1re édition. Aussi état, langue, prix payé, note perso.
@@ -21,7 +21,7 @@ App web de gestion de collection de cartes Pokémon pour Thomas. Interface en fr
   - SDK Firebase 11.0.2 chargé en import dynamique depuis gstatic.
 - **Document carte** : `{kind, cardId, setId, name, localId, image, v:{normal,reverse,holo,first}, cond, lang, paid, note, wish, grade:{co,note,value}, prices:{variante: €}, priceAt, addedAt}`.
 - **Valeur** = somme (quantité × cote Cardmarket tendance de la variante). La valeur gradée remplace la cote si elle est renseignée.
-- `api/scan.js` : fonction Vercel (Node, sans dépendance). Elle lit `ANTHROPIC_API_KEY`, modèle `claude-sonnet-5-5` par défaut, surchargeable avec la variable `SCAN_MODEL` (ex. `claude-haiku-5-5`, environ 10 fois moins cher). `GET /api/scan` renvoie `{ready}`.
+- `api/scan.js` : ancienne fonction Vercel (désactivée). Le scan OCR est maintenant 100 % local via Tesseract.js (CDN cdnjs). Aucune variable d'environnement requise pour le scan.
 - `firestore.rules` : chaque utilisateur ne lit et n'écrit que `users/{son uid}/**`.
 - `manifest.webmanifest` + `icon.svg` : installable sur l'écran d'accueil.
 
@@ -29,7 +29,7 @@ App web de gestion de collection de cartes Pokémon pour Thomas. Interface en fr
 1. **GitHub** : créer le dépôt `classeur-tcg` (compte zgvs8y68kf-sudo) et pousser ce dossier (`git remote add origin … && git push -u origin main`).
 2. **Vercel** : importer le dépôt dans l'équipe « Thomas » (team_v8HARSIjafmyUzBJkhD3EJno), sans framework ni build.
 3. **Firebase** : créer le projet, ajouter une app Web, coller la config dans `firebase-config.js`, activer Authentication > Google, créer Firestore (europe-west), coller `firestore.rules`, ajouter le domaine Vercel dans Authentication > Paramètres > Domaines autorisés.
-4. **Scan** : ajouter `ANTHROPIC_API_KEY` dans les variables d'environnement Vercel (et éventuellement `SCAN_MODEL=claude-haiku-5-5`), puis redéployer.
+4. **Scan** : fonctionne sans clé API — Tesseract.js tourne dans le navigateur. Pour de meilleurs résultats : bonne lumière, une carte bien cadrée, fond neutre.
 
 ## Limites connues / pistes
 - eBay bloque les accès directs : pas de prix eBay chiffré, seulement des liens de recherche. Une piste serait une API tierce (pokemon-api.com, TCG Price Lookup), avec clé côté serveur.
