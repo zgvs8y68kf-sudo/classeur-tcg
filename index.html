@@ -224,7 +224,8 @@ const PRINT_CODE = {
   "FST":"swsh8","BRS":"swsh9","ASR":"swsh10","LOR":"swsh11","SIT":"swsh12","CRZ":"swsh12pt5",
   "SUM":"sm1","GRI":"sm2","BUS":"sm3","CIN":"sm35","UPR":"sm5","FLI":"sm6","CES":"sm7",
   "DRM":"sm75","LOT":"sm8","TEU":"sm9","UNB":"sm10","UNM":"sm11","CEC":"sm12",
-  "SVP":"svp","PR-SW":"swshp","SMP":"smp",
+  "SVP":"svp","MEP":"mep","PR-SW":"swshp","SMP":"smp",
+  "MEW":"sv3pt5","PAR":"sv4","STE":"sv6pt5",
 };
 let totalIdx = new Map();
 function buildTotalIndex(){
@@ -872,7 +873,8 @@ async function lookupCard(number, total, codeHint){
   const hits = []; const tried = new Set();
 
   // 1. Code imprimé → setId direct (confidence max)
-  const hintId = codeHint ? (PRINT_CODE[codeHint.toUpperCase()] || null) : null;
+  const upCode = codeHint ? codeHint.toUpperCase() : "";
+  const hintId = upCode ? (PRINT_CODE[upCode] || upCode.toLowerCase()) : null;
   if (hintId) {
     tried.add(hintId);
     const c = await lookupInSet(hintId, norm, S.lang) || await lookupInSet(hintId, norm, "en");
