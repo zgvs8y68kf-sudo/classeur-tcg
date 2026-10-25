@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f131c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Classeur TCG">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<script src="/firebase-config.js"></script>
+<title>Classeur TCG</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: classeur 9 pochettes — vues empilées, barre d'onglets en bas, scanner au centre */
+:root{
+  --bg:#eef1f6; --surface:#ffffff; --sunk:#e2e7ef; --line:#cfd6e2;
+  --fg:#141a26; --muted:#5d6779; --accent:#e23b3b; --accent-fg:#ffffff;
+  --gold:#b88a12; --ok:#1f8a5b; --warn:#c57a00; --ghost:.22;
+  --holo:linear-gradient(115deg,#ff8ba7 0%,#ffd36e 22%,#8ef0c4 44%,#7cc6ff 66%,#c79bff 88%);
+  --display:"Chakra Petch",ui-monospace,"Segoe UI",system-ui,sans-serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:12px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f131c; --surface:#181e2b; --sunk:#121722; --line:#2a3245;
+  --fg:#e9edf5; --muted:#8e98ad; --accent:#ff5a5a; --accent-fg:#160606;
+  --gold:#e3b53c; --ok:#4cc68f; --warn:#f0a43a; --ghost:.18; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f131c; --surface:#181e2b; --sunk:#121722; --line:#2a3245;
+  --fg:#e9edf5; --muted:#8e98ad; --accent:#ff5a5a; --accent-fg:#160606;
+  --gold:#e3b53c; --ok:#4cc68f; --warn:#f0a43a; --ghost:.18; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--body);-webkit-tap-highlight-color:transparent}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px calc(96px + env(safe-area-inset-bottom,0px))}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;align-items:center;gap:10px;padding-block:10px;border-bottom:1px solid var(--line);margin-bottom:14px}
+header.top h1{font:700 20px/1.1 var(--display);letter-spacing:.02em;margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-wrap:balance}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:999px;height:36px;min-width:36px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-weight:600;font-size:13px}
+.lang{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.lang button{border:0;background:transparent;padding:6px 10px;font:600 12px var(--display);letter-spacing:.06em;color:var(--muted)}
+.lang button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+h2{font:700 13px var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}
+.muted{color:var(--muted)}
+.num{font-family:var(--display);font-variant-numeric:tabular-nums}
+
+/* Hero valeur */
+.hero{position:relative;border-radius:18px;padding:18px;background:var(--surface);border:1px solid var(--line);overflow:hidden}
+.hero::after{content:"";position:absolute;inset:0 0 auto;height:4px;background:var(--holo)}
+.hero .lbl{font:600 12px var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.hero .val{font:700 clamp(34px,9vw,52px)/1 var(--display);font-variant-numeric:tabular-nums;margin:6px 0 4px}
+.hero .delta{font:600 14px var(--display)}
+.up{color:var(--ok)} .down{color:var(--accent)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+.kpi{background:var(--sunk);border-radius:10px;padding:10px}
+.kpi b{display:block;font:700 18px var(--display);font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--muted)}
+@media (max-width:520px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.spark{width:100%;height:70px;margin-top:12px;display:block}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 14px;font-weight:600}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* Listes */
+.list{display:flex;flex-direction:column;gap:8px}
+.item{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;text-align:left;width:100%}
+.item img{width:44px;height:61px;object-fit:cover;border-radius:4px;background:var(--sunk);flex:none}
+.item .t{flex:1;min-width:0}
+.item .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .t small{color:var(--muted)}
+.item .p{font:700 15px var(--display);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* Séries */
+.serie{margin-bottom:6px}
+.serie > button{width:100%;display:flex;align-items:center;gap:10px;background:transparent;border:0;border-bottom:1px solid var(--line);padding:12px 0;text-align:left}
+.serie > button b{font:700 16px var(--display);flex:1}
+.serie > button .chev{transition:transform .2s}
+.serie.open > button .chev{transform:rotate(90deg)}
+.sets{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:12px 0}
+.set{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px;display:flex;flex-direction:column;gap:8px;text-align:left}
+.set .logo{height:46px;display:flex;align-items:center;justify-content:center}
+.set .logo img{max-height:46px;max-width:100%;object-fit:contain}
+.set .logo span{font:700 13px var(--display);text-align:center}
+.set .nm{font-weight:600;font-size:13px;line-height:1.25;min-height:2.5em}
+.bar{height:6px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--fg);border-radius:99px}
+.bar i.full{background:var(--holo)}
+.set .cnt{display:flex;justify-content:space-between;font:600 12px var(--display);color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* Classeur (set) */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.binder{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;background:var(--sunk);border-radius:14px;padding:10px}
+@media (min-width:640px){.binder{grid-template-columns:repeat(4,1fr)}}
+@media (min-width:860px){.binder{grid-template-columns:repeat(6,1fr)}}
+.pocket{position:relative;aspect-ratio:63/88;max-width:100%;border-radius:8px;background:var(--surface);border:1px solid var(--line);padding:0;overflow:hidden}
+.pocket img{width:100%;height:100%;object-fit:cover;display:block}
+.pocket.missing img{filter:grayscale(1);opacity:var(--ghost)}
+.pocket .noimg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 11px var(--display);color:var(--muted);text-align:center;padding:6px}
+.pocket .no{position:absolute;left:4px;bottom:4px;font:700 10px var(--display);background:color-mix(in srgb,var(--bg) 85%,transparent);color:var(--fg);padding:1px 5px;border-radius:4px;font-variant-numeric:tabular-nums}
+.pocket .qty{position:absolute;right:4px;top:4px;font:700 12px var(--display);background:var(--accent);color:var(--accent-fg);padding:2px 7px;border-radius:999px;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.pocket .wish{position:absolute;left:4px;top:4px;font-size:13px;color:var(--accent)}
+.pocket .grd{position:absolute;right:4px;bottom:4px;font:700 10px var(--display);background:var(--gold);color:#1a1200;padding:1px 5px;border-radius:4px}
+
+/* Feuille (sheet) */
+.scrim{position:fixed;inset:0;background:rgba(5,8,14,.55);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:640px;max-height:92%;overflow:auto;border-radius:18px 18px 0 0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+@media (min-width:700px){.scrim{align-items:center}.sheet{border-radius:18px;max-height:88%}}
+.sheet .grab{width:40px;height:4px;border-radius:9px;background:var(--line);margin:0 auto 12px}
+.detail{display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:16px}
+@media (max-width:520px){.detail{grid-template-columns:1fr}.detail .big{max-width:240px;margin:0 auto}}
+.big{width:100%;border-radius:12px;display:block;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.detail h3{font:700 22px/1.15 var(--display);margin:0}
+.prices{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0}
+.prices div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px}
+.prices b{display:block;font:700 16px var(--display);font-variant-numeric:tabular-nums}
+.prices span{font-size:11px;color:var(--muted)}
+.links{display:flex;gap:8px;flex-wrap:wrap}
+.links a{font-weight:600;font-size:13px;color:var(--fg);border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;text-decoration:none}
+.vrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.vrow span{flex:1}
+.step{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--surface)}
+.step button{border:0;background:transparent;width:36px;height:34px;font-size:18px;font-weight:700}
+.step b{min-width:28px;text-align:center;font:700 15px var(--display)}
+.field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);flex:1;min-width:120px}
+.field input,.field select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px;font-size:14px;color:var(--fg)}
+.fields{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+
+/* Scanner */
+.drop{border:2px dashed var(--line);border-radius:16px;padding:22px;text-align:center;background:var(--surface);display:flex;flex-direction:column;align-items:center;gap:10px}
+.drop .ico{width:56px;height:56px;border-radius:16px;background:var(--holo);display:grid;place-items:center}
+.cand{display:flex;gap:8px;overflow-x:auto;padding:4px 0 8px}
+.cand button{flex:none;width:86px;border:2px solid transparent;border-radius:8px;padding:0;background:var(--surface);overflow:hidden}
+.cand button[aria-pressed="true"]{border-color:var(--accent)}
+.cand img{width:100%;aspect-ratio:63/88;object-fit:cover;display:block}
+.cand small{display:block;font:600 10px var(--display);padding:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.det{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:10px}
+.spinner{width:18px;height:18px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:sp 0.8s linear infinite;display:inline-block;vertical-align:middle}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation:none}}
+.search{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 14px;font-size:16px}
+.note{background:var(--sunk);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--muted)}
+.empty{text-align:center;padding:28px 12px;color:var(--muted)}
+
+/* Barre d'onglets */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:flex-end;padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+nav.tabs button{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600;color:var(--muted);min-width:56px;padding:4px}
+nav.tabs button[aria-current="page"]{color:var(--fg)}
+nav.tabs svg{width:22px;height:22px}
+nav.tabs .scan{transform:translateY(-14px)}
+nav.tabs .scan .orb{width:58px;height:58px;border-radius:50%;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;box-shadow:0 6px 18px rgba(226,59,59,.4);border:4px solid var(--bg)}
+nav.tabs .scan .orb svg{width:26px;height:26px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;z-index:30;font-size:14px;max-width:90%}
+</style>
+
+</head>
+<body>
+<header class="top wrap" style="padding-block:10px;margin-bottom:0">
+  <h1 id="title">Ma collection</h1>
+  <button class="iconbtn" id="acct" data-act="acct">Connexion</button>
+  <div class="lang" role="group" aria-label="Langue des cartes">
+    <button id="lang-fr" data-lang="fr" aria-pressed="true">FR</button>
+    <button id="lang-en" data-lang="en" aria-pressed="false">EN</button>
+  </div>
+</header>
+
+<main class="wrap" id="app"></main>
+
+<nav class="tabs" aria-label="Navigation">
+  <button data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Valeur</button>
+  <button data-tab="series"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="9" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Séries</button>
+  <button data-tab="scan" class="scan" aria-label="Scanner"><span class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3.2"/></svg></span></button>
+  <button data-tab="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Chercher</button>
+  <button data-tab="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.4-9.3-9A5 5 0 0 1 12 6a5 5 0 0 1 9.3 6c-2.3 4.6-9.3 9-9.3 9z"/></svg>Listes</button>
+</nav>
+<input type="file" id="photo" accept="image/*" capture="environment" multiple hidden>
+
+<script>
+"use strict";
+const API = "https://api.tcgdex.net/v2";
+const $ = (s, el=document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const eur = v => v == null || isNaN(v) ? "—" : v.toLocaleString("fr-FR",{style:"currency",currency:"EUR",maximumFractionDigits:v>=100?0:2});
+const today = () => new Date().toISOString().slice(0,10);
+const VARIANTS = [["normal","Normale"],["reverse","Reverse"],["holo","Holo"],["first","1re édition"]];
+const COND = ["Mint","Near Mint","Excellent","Good","Light Played","Played","Poor"];
+const GRADERS = ["","PCA","PSA","CGC","BGS","Collect Aura"];
+
+/* ---------- état ---------- */
+const S = {
+  lang: lsGet("lang") || "fr",
+  tab: "home",
+  catalog: null,          // {series:[{id,name,sets:[...]}], sets:{id:set}}
+  setCache: {},           // setId -> set detail
+  priceCache: {},         // cardId -> {cm, tp, at}
+  coll: {},               // cardId -> doc
+  history: [],            // [{d,v}]
+  openSeries: new Set(JSON.parse(lsGet("openSeries") || "[]")),
+  setView: null, setFilter: "all",
+  scan: [], scanBusy: false,
+  listTab: "wish",
+};
+
+function lsGet(k){ try { return localStorage.getItem("ctcg_"+k); } catch { return null; } }
+function lsSet(k,v){ try { localStorage.setItem("ctcg_"+k, v); } catch {} }
+
+/* ---------- stockage : db partagé entre appareils, sinon local ---------- */
+const Store = {
+  mode: "local", fb: null, uid: null, unsub: null,
+  async init(){
+    const cfg = window.FIREBASE_CONFIG || {};
+    if (!cfg.apiKey) { this.loadLocal(); return; }
+    try {
+      const V = "11.0.2", base = `https://www.gstatic.com/firebasejs/${V}/`;
+      const [app, auth, fs] = await Promise.all([import(base+"firebase-app.js"), import(base+"firebase-auth.js"), import(base+"firebase-firestore.js")]);
+      const fapp = app.initializeApp(cfg);
+      const a = auth.getAuth(fapp), db = fs.getFirestore(fapp);
+      this.fb = {auth, a, fs, db};
+      auth.onAuthStateChanged(a, user => {
+        this.unsub && this.unsub(); this.unsub = null;
+        this.uid = user ? user.uid : null; S.user = user;
+        if (!user) { this.mode = "local"; this.loadLocal(); return; }
+        this.mode = "db";
+        this.migrateLocal();
+        this.unsub = fs.onSnapshot(fs.collection(db, "users", user.uid, "cards"), snap => {
+          const coll = {}; snap.forEach(d => { const x = d.data(); if (x && x.cardId) coll[x.cardId] = x; });
+          S.coll = coll; render();
+        }, e => toast("Synchronisation coupée : " + (e.code || e.message)));
+        fs.getDoc(fs.doc(db, "users", user.uid, "meta", "history")).then(d => { S.history = d.exists() ? (d.data().points || []) : []; render(); }).catch(() => {});
+      });
+    } catch(e) { toast("Firebase indisponible, collection locale"); this.loadLocal(); }
+  },
+  async signIn(){
+    if (!this.fb) { toast("Firebase n'est pas encore configuré"); return; }
+    const {auth, a} = this.fb, p = new auth.GoogleAuthProvider();
+    try { await auth.signInWithPopup(a, p); } catch(e) { if (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment") auth.signInWithRedirect(a, p); else if (e.code !== "auth/popup-closed-by-user") toast("Connexion impossible : " + e.code); }
+  },
+  async signOut(){ if (this.fb) await this.fb.auth.signOut(this.fb.a); },
+  async migrateLocal(){
+    let local = {}; try { local = JSON.parse(lsGet("coll") || "{}"); } catch {}
+    const ids = Object.keys(local); if (!ids.length) return;
+    const {fs, db} = this.fb;
+    for (const id of ids) { try { await fs.setDoc(fs.doc(db, "users", this.uid, "cards", id), local[id], {merge: true}); } catch {} }
+    lsSet("coll", "{}"); toast(ids.length + " carte(s) locale(s) envoyée(s) dans ton compte");
+  },
+  loadLocal(){
+    try { S.coll = JSON.parse(lsGet("coll") || "{}"); S.history = JSON.parse(lsGet("hist") || "[]"); } catch { S.coll = {}; S.history = []; }
+    render();
+  },
+  async save(card){
+    card = JSON.parse(JSON.stringify(card));
+    S.coll[card.cardId] = card; render();
+    if (this.mode === "db") { const {fs, db} = this.fb; try { await fs.setDoc(fs.doc(db, "users", this.uid, "cards", card.cardId), card); } catch(e){ toast("Enregistrement refusé : " + (e.code || e.message)); } }
+    else lsSet("coll", JSON.stringify(S.coll));
+  },
+  async remove(cardId){
+    delete S.coll[cardId]; render();
+    if (this.mode === "db") { const {fs, db} = this.fb; try { await fs.deleteDoc(fs.doc(db, "users", this.uid, "cards", cardId)); } catch {} }
+    else lsSet("coll", JSON.stringify(S.coll));
+  },
+  async saveHistory(){
+    if (this.mode === "db") { const {fs, db} = this.fb; try { await fs.setDoc(fs.doc(db, "users", this.uid, "meta", "history"), {points: S.history}); } catch {} }
+    else lsSet("hist", JSON.stringify(S.history));
+  }
+};
+
+/* ---------- données cartes (TCGdex) ---------- */
+async function j(url){ const r = await fetch(url); if (!r.ok) throw new Error(r.status); return r.json(); }
+
+async function loadCatalog(force){
+  const key = "cat_" + S.lang;
+  if (!force) { try { const c = JSON.parse(lsGet(key) || "null"); if (c && Date.now() - c.at < 3*864e5) { S.catalog = c; render(); return; } } catch {} }
+  S.catalog = null; render();
+  try {
+    const series = await j(`${API}/${S.lang}/series`);
+    const out = []; const sets = {};
+    await pool(series, 6, async s => {
+      try {
+        const d = await j(`${API}/${S.lang}/series/${encodeURIComponent(s.id)}`);
+        const ss = (d.sets || []).map(x => ({id:x.id, name:x.name, logo:x.logo, symbol:x.symbol, total:x.cardCount?.total||0, official:x.cardCount?.official||x.cardCount?.total||0, serie:s.id}));
+        ss.forEach(x => sets[x.id] = x);
+        out.push({id:s.id, name:s.name, logo:s.logo, releaseDate:d.releaseDate || "", order: series.indexOf(s), sets: ss});
+      } catch {}
+    });
+    out.sort((a,b) => (b.releaseDate||"").localeCompare(a.releaseDate||"") || b.order - a.order);
+    S.catalog = {at: Date.now(), series: out, sets};
+    lsSet(key, JSON.stringify(S.catalog));
+  } catch(e) { S.catalog = {error: true, series: [], sets: {}}; }
+  render();
+}
+
+async function loadSet(id){
+  const k = S.lang + ":" + id;
+  if (S.setCache[k]) return S.setCache[k];
+  const d = await j(`${API}/${S.lang}/sets/${encodeURIComponent(id)}`);
+  d.cards = (d.cards || []).slice().sort((a,b) => natCmp(a.localId, b.localId));
+  return S.setCache[k] = d;
+}
+function natCmp(a,b){ const na = parseInt(a,10), nb = parseInt(b,10); if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb; return String(a).localeCompare(String(b), "fr", {numeric:true}); }
+
+async function loadCard(id){
+  let d; try { d = await j(`${API}/${S.lang}/cards/${encodeURIComponent(id)}`); } catch {}
+  if (!d || !d.pricing) { try { const en = await j(`${API}/en/cards/${encodeURIComponent(id)}`); d = d ? {...d, pricing: en.pricing} : en; } catch {} }
+  return d;
+}
+
+/* prix : Cardmarket (EUR) en priorité, TCGplayer (USD) à titre indicatif */
+function priceOf(pricing, variant){
+  const cm = pricing?.cardmarket || null, tp = pricing?.tcgplayer || null;
+  const holo = variant === "reverse" || variant === "holo";
+  const pick = (...vals) => vals.find(v => typeof v === "number" && v > 0) ?? null;
+  const c = cm ? {
+    trend: holo ? pick(cm["trend-holo"], cm.trendHolo, cm.trend) : pick(cm.trend, cm.avg),
+    avg:   holo ? pick(cm["avg-holo"], cm.avgHolo, cm.avg) : pick(cm.avg, cm.avg30),
+    low:   holo ? pick(cm["low-holo"], cm.lowHolo, cm.low) : pick(cm.low),
+    avg7:  holo ? pick(cm["avg7-holo"], cm.avg7) : pick(cm.avg7),
+    avg30: holo ? pick(cm["avg30-holo"], cm.avg30) : pick(cm.avg30),
+    updated: cm.updated || cm.updatedAt || null,
+  } : null;
+  let t = null;
+  if (tp) { const keys = holo ? ["reverse-holofoil","reverseHolofoil","holofoil"] : ["normal","holofoil","1st-edition-holofoil"]; for (const k of keys) if (tp[k]) { t = pick(tp[k].marketPrice, tp[k].market, tp[k].midPrice, tp[k].mid); if (t) break; } }
+  return { cm: c, tp: t, main: c ? pick(c.trend, c.avg, c.avg7) : null };
+}
+
+function cardValue(doc){
+  let v = 0, priced = false;
+  for (const [k] of VARIANTS) { const q = doc.v?.[k] || 0; if (!q) continue; const p = doc.prices?.[k] ?? doc.prices?.normal; if (p) { v += q * p; priced = true; } }
+  if (doc.grade?.value) { v = doc.grade.value * qty(doc); priced = true; }
+  return priced ? v : null;
+}
+const qty = d => VARIANTS.reduce((s,[k]) => s + (d.v?.[k]||0), 0);
+
+async function pool(items, n, fn){ let i = 0; await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => { while (i < items.length) { const it = items[i++]; await fn(it); } })); }
+
+async function refreshPrices(btn){
+  const docs = Object.values(S.coll); if (!docs.length) return;
+  btn && (btn.disabled = true);
+  let done = 0;
+  await pool(docs, 4, async d => {
+    const c = await loadCard(d.cardId); done++;
+    if (btn) btn.textContent = `Prix… ${done}/${docs.length}`;
+    if (!c?.pricing) return;
+    const prices = {}; for (const [k] of VARIANTS) prices[k] = priceOf(c.pricing, k).main;
+    if (JSON.stringify(prices) !== JSON.stringify(d.prices)) await Store.save({...S.coll[d.cardId] || d, prices, priceAt: Date.now()});
+  });
+  const total = totals().value;
+  const h = S.history.filter(p => p.d !== today()); h.push({d: today(), v: Math.round(total*100)/100});
+  S.history = h.slice(-400); await Store.saveHistory();
+  if (btn) { btn.disabled = false; btn.textContent = "Actualiser les prix"; }
+  toast("Prix à jour"); render();
+}
+
+function totals(){
+  const docs = Object.values(S.coll);
+  let value = 0, cards = 0, uniq = 0, dupes = 0, paid = 0;
+  docs.forEach(d => { const q = qty(d); if (!q) return; uniq++; cards += q; dupes += Math.max(0, q-1); value += cardValue(d) || 0; paid += (d.paid || 0); });
+  return {value, cards, uniq, dupes, paid};
+}
+function ownedInSet(setId){ return Object.values(S.coll).filter(d => d.setId === setId && qty(d) > 0).length; }
+
+/* ---------- rendu ---------- */
+function render(){
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === S.tab ? "page" : "false"));
+  const acct = $("#acct"); if (acct) { acct.hidden = !window.FIREBASE_CONFIG?.apiKey; acct.textContent = S.user ? "Déconnexion" : "Connexion"; acct.title = S.user ? (S.user.email || "") : "Se connecter avec Google pour synchroniser"; }
+  document.querySelectorAll(".lang button").forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === S.lang));
+  const app = $("#app");
+  const titles = {home:"Ma collection", series:"Séries", scan:"Scanner", search:"Chercher", lists:"Listes", set: S.setView ? (S.catalog?.sets?.[S.setView]?.name || "Extension") : ""};
+  $("#title").textContent = titles[S.tab];
+  if (S.tab === "home") app.innerHTML = viewHome();
+  else if (S.tab === "series") app.innerHTML = viewSeries();
+  else if (S.tab === "set") viewSet(app);
+  else if (S.tab === "scan") app.innerHTML = viewScan();
+  else if (S.tab === "search") { if (!$("#q")) app.innerHTML = viewSearch(); }
+  else if (S.tab === "lists") app.innerHTML = viewLists();
+}
+
+function sparkline(points){
+  if (points.length < 2) return `<p class="muted" style="margin:10px 0 0;font-size:13px">La courbe de valeur apparaît après deux actualisations des prix, à des jours différents.</p>`;
+  const W = 600, H = 70, vs = points.map(p => p.v), min = Math.min(...vs), max = Math.max(...vs), r = (max - min) || 1;
+  const xy = points.map((p,i) => [i*(W-8)/(points.length-1)+4, H-6-(p.v-min)/r*(H-14)]);
+  const d = xy.map((p,i) => (i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+  const last = xy[xy.length-1];
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Évolution de la valeur">
+    <path d="${d} L${last[0]} ${H} L4 ${H} Z" fill="var(--accent)" fill-opacity=".12"/>
+    <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    <circle cx="${last[0]}" cy="${last[1]}" r="4" fill="var(--accent)"/></svg>`;
+}
+
+function itemRow(d, right){
+  return `<button class="item" data-open="${esc(d.cardId)}"><img src="${esc(d.image ? d.image + "/low.webp" : "")}" alt="" loading="lazy">
+    <span class="t"><b>${esc(d.name)}</b><small>${esc(S.catalog?.sets?.[d.setId]?.name || d.setId)} · ${esc(d.localId)}${d.grade?.co ? " · " + esc(d.grade.co + " " + (d.grade.note||"")) : ""}</small></span>
+    <span class="p">${right}</span></button>`;
+}
+
+function viewHome(){
+  const t = totals(), h = S.history;
+  const prev = h.length > 1 ? h[h.length-2].v : null, last = h.length ? h[h.length-1].v : null;
+  const delta = prev != null && last != null ? last - prev : null;
+  const top = Object.values(S.coll).filter(d => qty(d)).map(d => ({d, v: cardValue(d)})).filter(x => x.v).sort((a,b) => b.v - a.v).slice(0, 8);
+  const recent = Object.values(S.coll).filter(d => qty(d)).sort((a,b) => (b.addedAt||0) - (a.addedAt||0)).slice(0, 6);
+  const empty = !t.uniq;
+  return `
+  <section class="hero">
+    <div class="lbl">Valeur estimée · Cardmarket</div>
+    <div class="val">${eur(t.value)}</div>
+    ${delta != null ? `<div class="delta ${delta>=0?"up":"down"}">${delta>=0?"▲":"▼"} ${eur(Math.abs(delta))} depuis le ${new Date(h[h.length-2].d).toLocaleDateString("fr-FR")}</div>` : `<div class="delta muted">Tendance Cardmarket de chaque carte × quantité</div>`}
+    ${sparkline(h)}
+    <div class="kpis">
+      <div class="kpi"><b>${t.cards}</b><span>cartes</span></div>
+      <div class="kpi"><b>${t.uniq}</b><span>différentes</span></div>
+      <div class="kpi"><b>${t.dupes}</b><span>doubles à échanger</span></div>
+      <div class="kpi"><b>${t.paid ? eur(t.value - t.paid) : "—"}</b><span>plus-value vs payé</span></div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn primary" data-act="scan">Scanner des cartes</button>
+      <button class="btn" id="refresh" data-act="refresh" ${empty?"disabled":""}>Actualiser les prix</button>
+      <button class="btn" data-act="export" ${empty?"disabled":""}>Exporter (CSV)</button>
+    </div>
+  </section>
+  ${empty ? `<div class="empty"><p style="font-size:16px;color:var(--fg);font-weight:600;margin:0 0 6px">Ton classeur est vide</p><p style="margin:0">Scanne une carte (ou une page de classeur entière) avec le bouton rouge, ou ouvre <b>Séries</b> pour cocher tes cartes à la main.</p></div>` : `
+  <h2>Cartes les plus chères</h2>
+  <div class="list">${top.length ? top.map(x => itemRow(x.d, eur(x.v))).join("") : `<p class="muted">Appuie sur « Actualiser les prix » pour récupérer les cotes.</p>`}</div>
+  <h2>Ajoutées récemment</h2>
+  <div class="list">${recent.map(d => itemRow(d, "×" + qty(d))).join("")}</div>`}
+  <p class="muted" style="font-size:12px;margin-top:22px">${Store.mode === "db" ? "Collection synchronisée sur tous tes appareils (" + esc(S.user?.email || "compte Google") + ")." : window.FIREBASE_CONFIG?.apiKey ? "Collection enregistrée sur cet appareil. Connecte-toi pour la synchroniser." : "Collection enregistrée sur cet appareil uniquement."} Données et images : TCGdex. Cotes : Cardmarket (mise à jour quotidienne) et TCGplayer.</p>`;
+}
+
+function viewSeries(){
+  const c = S.catalog;
+  if (!c) return `<p class="muted"><span class="spinner"></span> Chargement des séries…</p>`;
+  if (c.error) return `<div class="note">Impossible de joindre la base de cartes. Vérifie ta connexion puis <button class="btn" data-act="reloadcat">Réessayer</button></div>`;
+  return c.series.map(s => {
+    const open = S.openSeries.has(s.id);
+    const own = s.sets.reduce((n, x) => n + ownedInSet(x.id), 0), tot = s.sets.reduce((n, x) => n + (x.official||0), 0);
+    return `<div class="serie ${open?"open":""}"><button data-serie="${esc(s.id)}" aria-expanded="${open}">
+      <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m9 6 6 6-6 6"/></svg>
+      <b>${esc(s.name)}</b><span class="num muted" style="font-size:13px">${own}/${tot}</span></button>
+      ${open ? `<div class="sets">${s.sets.slice().reverse().map(setTile).join("")}</div>` : ""}</div>`;
+  }).join("");
+}
+function setTile(x){
+  const own = ownedInSet(x.id), tot = x.official || x.total || 0, pct = tot ? Math.min(100, own/tot*100) : 0;
+  return `<button class="set" data-set="${esc(x.id)}"><div class="logo">${x.logo ? `<img src="${esc(x.logo)}.webp" alt="${esc(x.name)}" loading="lazy">` : `<span>${esc(x.name)}</span>`}</div>
+    <div class="nm">${esc(x.name)}</div><div class="bar"><i class="${pct>=100?"full":""}" style="width:${pct}%"></i></div>
+    <div class="cnt"><span>${own}/${tot}</span><span>${Math.round(pct)}%</span></div></button>`;
+}
+
+async function viewSet(app){
+  const id = S.setView, meta = S.catalog?.sets?.[id];
+  if (!S.setCache[S.lang + ":" + id]) app.innerHTML = `<p class="muted"><span class="spinner"></span> Chargement de l'extension…</p>`;
+  let set; try { set = await loadSet(id); } catch { app.innerHTML = `<div class="note">Extension introuvable dans cette langue.</div>`; return; }
+  if (S.tab !== "set" || S.setView !== id) return;
+  const f = S.setFilter;
+  const cards = set.cards.filter(c => { const d = S.coll[c.id], q = d ? qty(d) : 0;
+    return f === "all" || (f === "own" && q) || (f === "miss" && !q) || (f === "dup" && q > 1); });
+  const own = ownedInSet(id), tot = set.cardCount?.official || meta?.official || set.cards.length;
+  let missCost = 0;
+  app.innerHTML = `
+  <div class="toolbar">
+    <button class="iconbtn" data-act="back" aria-label="Retour aux séries">← Séries</button>
+    <span class="num" style="font-weight:700">${own}/${tot}</span><span class="muted" style="font-size:13px">${set.cards.length > tot ? `(+${set.cards.length - tot} secrètes)` : ""}</span>
+  </div>
+  <div class="chips" role="group" aria-label="Filtre" style="margin-bottom:12px">
+    ${[["all","Toutes"],["own","Possédées"],["miss","Manquantes"],["dup","Doubles"]].map(([k,l]) => `<button class="chip" data-filter="${k}" aria-pressed="${f===k}">${l}</button>`).join("")}
+  </div>
+  ${cards.length ? `<div class="binder">${cards.map(c => {
+    const d = S.coll[c.id], q = d ? qty(d) : 0;
+    return `<button class="pocket ${q?"":"missing"}" data-open="${esc(c.id)}" aria-label="${esc(c.name)} n°${esc(c.localId)}${q?", "+q+" exemplaire(s)":", manquante"}">
+      ${c.image ? `<img src="${esc(c.image)}/low.webp" alt="" loading="lazy">` : `<span class="noimg">${esc(c.name)}<br>pas d'image</span>`}
+      <span class="no">${esc(c.localId)}</span>${q > 1 ? `<span class="qty">×${q}</span>` : ""}${d?.wish && !q ? `<span class="wish">♥</span>` : ""}${d?.grade?.co ? `<span class="grd">${esc(d.grade.co)} ${esc(d.grade.note||"")}</span>` : ""}
+    </button>`; }).join("")}</div>` : `<div class="empty">Aucune carte pour ce filtre.</div>`}`;
+}
+
+function viewScan(){
+  const rows = S.scan.map((s, i) => {
+    if (s.status === "busy") return `<div class="det"><span class="spinner"></span> Analyse de la photo ${i+1}…</div>`;
+    if (s.status === "error") return `<div class="det"><b>Photo ${i+1}</b> — ${esc(s.msg)}</div>`;
+    return s.found.map((f, k) => `<div class="det">
+      <div class="row" style="justify-content:space-between"><b>${esc(f.det.name || "Carte")} <span class="muted num">${esc(f.det.number||"?")}${f.det.total?"/"+esc(f.det.total):""}</span></b>
+      ${f.added ? `<span class="up" style="font-weight:700">Ajoutée ✓</span>` : ""}</div>
+      ${f.cands.length ? `<div class="cand">${f.cands.slice(0,12).map((c,ci) => `<button data-pick="${i}:${k}:${ci}" aria-pressed="${f.sel===ci}"><img src="${esc(c.image ? c.image+"/low.webp" : "")}" alt="" loading="lazy"><small>${esc(S.catalog?.sets?.[c.setId]?.name || c.setId)}</small></button>`).join("")}</div>
+      <div class="row"><select id="var-${i}-${k}" class="chip" aria-label="Variante">${VARIANTS.map(([v,l]) => `<option value="${v}" ${f.det.variant===v?"selected":""}>${l}</option>`).join("")}</select>
+      <button class="btn primary" data-addscan="${i}:${k}">${f.added ? "Ajouter un exemplaire de plus" : "Ajouter au classeur"}</button></div>`
+      : `<p class="muted" style="margin:6px 0">Pas trouvée automatiquement. <button class="btn" data-act="tosearch" data-q="${esc(f.det.name||"")}">Chercher « ${esc(f.det.name||"")} »</button></p>`}
+    </div>`).join("") || `<div class="det">Photo ${i+1} : aucune carte détectée.</div>`;
+  }).join("");
+  return `
+  <div class="drop">
+    <div class="ico"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3.2"/></svg></div>
+    <b style="font-size:16px">Photographie une carte ou une page de classeur</b>
+    <span class="muted" style="font-size:13px;max-width:36em">Claude lit le nom et le numéro (ex. 136/189) de chaque carte visible, jusqu'à 9 par photo. Tu valides la bonne édition avant l'ajout.</span>
+    <button class="btn primary" data-act="photo" id="photobtn">Prendre / choisir des photos</button>
+    
+  </div>
+  <div style="margin-top:14px">${rows}</div>
+  ${S.scan.length ? `<button class="btn" data-act="clearscan">Vider les résultats</button>` : `<p class="muted" style="font-size:13px;margin-top:14px">Astuce : bonne lumière, cartes à plat, sans reflet sur le numéro en bas de la carte.</p>`}`;
+}
+
+function viewSearch(){
+  return `<input id="q" class="search" type="search" placeholder="Nom de la carte (ex. Dracaufeu, Mew ex…)" autocomplete="off">
+  <div id="results" style="margin-top:12px"><p class="muted">Tape au moins 3 lettres. Toutes les extensions sont cherchées dans la langue choisie en haut.</p></div>`;
+}
+let searchTimer;
+async function doSearch(q){
+  const box = $("#results"); if (!box) return;
+  if (q.length < 3) return;
+  box.innerHTML = `<p class="muted"><span class="spinner"></span> Recherche…</p>`;
+  try {
+    const res = await j(`${API}/${S.lang}/cards?name=${encodeURIComponent(q)}`);
+    if ($("#q")?.value.trim() !== q) return;
+    const list = (res || []).map(c => ({...c, setId: c.id.slice(0, c.id.lastIndexOf("-"))}));
+    box.innerHTML = list.length ? `<div class="binder">${list.slice(0, 120).map(c => { const d = S.coll[c.id], qn = d ? qty(d) : 0;
+      return `<button class="pocket ${qn?"":"missing"}" data-open="${esc(c.id)}" aria-label="${esc(c.name)}">${c.image ? `<img src="${esc(c.image)}/low.webp" alt="" loading="lazy">` : `<span class="noimg">${esc(c.name)}</span>`}
+      <span class="no">${esc(S.catalog?.sets?.[c.setId]?.name?.slice(0,14) || c.setId)} ${esc(c.localId)}</span>${qn>1?`<span class="qty">×${qn}</span>`:""}</button>`; }).join("")}</div>
+      <p class="muted" style="font-size:12px">${list.length} résultat(s). Les cartes en gris ne sont pas dans ta collection.</p>` : `<div class="empty">Aucune carte « ${esc(q)} ».</div>`;
+  } catch { box.innerHTML = `<div class="note">Recherche impossible pour le moment.</div>`; }
+}
+
+function viewLists(){
+  const all = Object.values(S.coll);
+  const wish = all.filter(d => d.wish && !qty(d));
+  const dup = all.filter(d => qty(d) > 1);
+  const graded = all.filter(d => d.grade?.co && qty(d));
+  const L = S.listTab;
+  const list = L === "wish" ? wish : L === "dup" ? dup : graded;
+  const sum = L === "wish" ? wish.reduce((s,d) => s + (d.prices?.normal || 0), 0) : L === "dup" ? dup.reduce((s,d) => s + (cardValue(d)||0)/qty(d)*(qty(d)-1), 0) : graded.reduce((s,d) => s + (cardValue(d)||0), 0);
+  const label = {wish:"Coût estimé pour compléter la liste", dup:"Valeur des doubles", graded:"Valeur des cartes gradées"}[L];
+  return `<div class="chips" role="group" style="margin-bottom:12px">
+    <button class="chip" data-list="wish" aria-pressed="${L==="wish"}">♥ Souhaits (${wish.length})</button>
+    <button class="chip" data-list="dup" aria-pressed="${L==="dup"}">Doubles (${dup.length})</button>
+    <button class="chip" data-list="graded" aria-pressed="${L==="graded"}">Gradées (${graded.length})</button></div>
+    <div class="note" style="margin-bottom:12px">${label} : <b class="num" style="color:var(--fg)">${eur(sum)}</b></div>
+    <div class="list">${list.length ? list.map(d => itemRow(d, L==="dup" ? "×"+(qty(d)-1)+" en trop" : eur(L==="wish" ? d.prices?.normal : cardValue(d)))).join("") :
+      `<div class="empty">${L==="wish" ? "Ouvre une carte manquante et touche ♥ pour l'ajouter à ta liste de souhaits." : L==="dup" ? "Pas encore de doubles." : "Indique le grading (PCA, PSA…) dans la fiche d'une carte."}</div>`}</div>`;
+}
+
+/* ---------- fiche carte ---------- */
+async function openCard(id){
+  const scrim = document.createElement("div"); scrim.className = "scrim";
+  scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="Fiche carte"><div class="grab"></div><p class="muted"><span class="spinner"></span> Chargement…</p></div>`;
+  document.body.appendChild(scrim);
+  const close = () => { scrim.remove(); render(); };
+  scrim.addEventListener("click", e => { if (e.target === scrim) close(); });
+  const c = await loadCard(id);
+  if (!c) { $(".sheet", scrim).innerHTML = `<div class="grab"></div><p>Carte introuvable.</p>`; return; }
+  const setId = c.set?.id || id.slice(0, id.lastIndexOf("-"));
+  let doc = S.coll[id] || {kind:"card", cardId:id, setId, name:c.name, localId:c.localId, image:c.image||"", rarity:c.rarity||"", v:{}, cond:"Near Mint", wish:false};
+  const prices = {}; for (const [k] of VARIANTS) prices[k] = priceOf(c.pricing, k).main;
+  const p = priceOf(c.pricing, "normal"), ph = priceOf(c.pricing, "reverse");
+  const avail = VARIANTS.filter(([k]) => k === "normal" ? (c.variants?.normal !== false) : k === "reverse" ? c.variants?.reverse : k === "holo" ? c.variants?.holo : c.variants?.firstEdition);
+  const shown = avail.length ? avail : VARIANTS.slice(0,1);
+  const setName = c.set?.name || setId, total = c.set?.cardCount?.official;
+  const qStr = `${c.name} ${c.localId}${total ? "/" + total : ""}`;
+  const cmUrl = `https://www.cardmarket.com/${S.lang === "fr" ? "fr" : "en"}/Pokemon/Products/Search?searchString=${encodeURIComponent(c.name + " " + setName)}`;
+  const ebayUrl = `https://www.ebay.fr/sch/i.html?_nkw=${encodeURIComponent(qStr)}&LH_Sold=1&LH_Complete=1`;
+  const ebayLive = `https://www.ebay.fr/sch/i.html?_nkw=${encodeURIComponent(qStr)}`;
+
+  const paint = () => {
+    const q = qty(doc);
+    $(".sheet", scrim).innerHTML = `<div class="grab"></div>
+    <div class="detail">
+      <img class="big" src="${esc(c.image ? c.image + "/high.webp" : "")}" alt="${esc(c.name)}">
+      <div style="min-width:0">
+        <div class="row" style="justify-content:space-between;align-items:flex-start"><h3>${esc(c.name)}</h3>
+          <button class="iconbtn" id="wishbtn" aria-pressed="${!!doc.wish}" title="Liste de souhaits" style="color:${doc.wish?"var(--accent)":"inherit"}">${doc.wish?"♥":"♡"}</button></div>
+        <div class="muted" style="font-size:13px;margin-top:4px">${esc(setName)} · <span class="num">${esc(c.localId)}${total?"/"+total:""}</span>${c.rarity ? " · " + esc(c.rarity) : ""}${c.illustrator ? " · ill. " + esc(c.illustrator) : ""}</div>
+        <div class="prices">
+          <div><b>${eur(p.cm?.trend)}</b><span>Tendance CM</span></div>
+          <div><b>${eur(p.cm?.avg30)}</b><span>Moy. 30 j</span></div>
+          <div><b>${eur(p.cm?.low)}</b><span>Prix le + bas</span></div>
+          ${ph.cm && ph.cm.trend !== p.cm?.trend ? `<div><b>${eur(ph.cm.trend)}</b><span>Reverse / holo</span></div>` : ""}
+          <div><b>${eur(p.cm?.avg7)}</b><span>Moy. 7 j</span></div>
+          <div><b>${p.tp ? "$" + p.tp.toFixed(2) : "—"}</b><span>TCGplayer (US)</span></div>
+        </div>
+        ${!p.cm ? `<p class="muted" style="font-size:12px;margin:0 0 8px">Pas de cote Cardmarket pour cette carte (fréquent sur les sorties très récentes ou les cartes japonaises).</p>` : ""}
+        <div class="links"><a href="${cmUrl}" target="_blank" rel="noopener">Cardmarket ↗</a><a href="${ebayUrl}" target="_blank" rel="noopener">eBay ventes réussies ↗</a><a href="${ebayLive}" target="_blank" rel="noopener">eBay en vente ↗</a></div>
+      </div>
+    </div>
+    <h2>Dans mon classeur ${q ? `<span class="num" style="color:var(--fg)">· ${q}</span>` : ""}</h2>
+    ${shown.map(([k,l]) => `<div class="vrow"><span>${l} <small class="muted num">${eur(prices[k] ?? prices.normal)}</small></span>
+      <span class="step"><button data-dec="${k}" aria-label="Retirer ${l}">−</button><b>${doc.v?.[k]||0}</b><button data-inc="${k}" aria-label="Ajouter ${l}">+</button></span></div>`).join("")}
+    <div class="fields">
+      <label class="field">État<select id="f-cond">${COND.map(x => `<option ${doc.cond===x?"selected":""}>${x}</option>`).join("")}</select></label>
+      <label class="field">Langue<select id="f-lang">${["FR","EN","JP","DE","IT","ES"].map(x => `<option ${(doc.lang||S.lang.toUpperCase())===x?"selected":""}>${x}</option>`).join("")}</select></label>
+      <label class="field">Prix payé (€)<input id="f-paid" type="number" inputmode="decimal" min="0" step="0.01" value="${doc.paid ?? ""}"></label>
+    </div>
+    <div class="fields">
+      <label class="field">Gradée chez<select id="f-gco">${GRADERS.map(x => `<option value="${x}" ${(doc.grade?.co||"")===x?"selected":""}>${x || "Non gradée"}</option>`).join("")}</select></label>
+      <label class="field">Note<input id="f-gnote" type="text" placeholder="ex. 10, 9.5" value="${esc(doc.grade?.note||"")}"></label>
+      <label class="field">Valeur gradée (€)<input id="f-gval" type="number" inputmode="decimal" min="0" step="1" value="${doc.grade?.value ?? ""}" placeholder="remplace la cote"></label>
+    </div>
+    <label class="field" style="margin-top:10px">Note perso<input id="f-note" type="text" value="${esc(doc.note||"")}" placeholder="ex. classeur bleu, page 4"></label>
+    <div class="row" style="margin-top:16px;justify-content:space-between">
+      ${S.coll[id] ? `<button class="btn" id="delbtn">Retirer de la collection</button>` : "<span></span>"}
+      <button class="btn primary" id="okbtn">Fermer</button></div>`;
+  };
+  const commit = () => {
+    doc = {...doc, prices, priceAt: Date.now(), cond: $("#f-cond",scrim).value, lang: $("#f-lang",scrim).value,
+      paid: $("#f-paid",scrim).value === "" ? null : +$("#f-paid",scrim).value, note: $("#f-note",scrim).value.trim(),
+      grade: $("#f-gco",scrim).value ? {co: $("#f-gco",scrim).value, note: $("#f-gnote",scrim).value.trim(), value: $("#f-gval",scrim).value === "" ? null : +$("#f-gval",scrim).value} : null};
+    if (!doc.addedAt && qty(doc)) doc.addedAt = Date.now();
+    if (qty(doc) || doc.wish) Store.save(doc); else if (S.coll[id]) Store.remove(id);
+  };
+  paint();
+  scrim.addEventListener("click", e => {
+    const t = e.target.closest("button"); if (!t) return;
+    if (t.dataset.inc || t.dataset.dec) { const k = t.dataset.inc || t.dataset.dec; doc.v = {...doc.v, [k]: Math.max(0, (doc.v?.[k]||0) + (t.dataset.inc ? 1 : -1))}; commit(); paint(); }
+    else if (t.id === "wishbtn") { doc.wish = !doc.wish; commit(); paint(); }
+    else if (t.id === "delbtn") { Store.remove(id); close(); toast("Retirée"); }
+    else if (t.id === "okbtn") { commit(); close(); }
+  });
+  scrim.addEventListener("change", () => { commit(); });
+}
+
+/* ---------- scan via Claude ---------- */
+async function shrink(file){
+  const bmp = await createImageBitmap(file).catch(() => null);
+  if (!bmp) return file;
+  const m = 1568 / Math.max(bmp.width, bmp.height), s = Math.min(1, m);
+  const cv = document.createElement("canvas"); cv.width = Math.round(bmp.width*s); cv.height = Math.round(bmp.height*s);
+  cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+  return await new Promise(r => cv.toBlob(b => r(b || file), "image/jpeg", 0.88));
+}
+
+const SCAN_PROMPT = `Tu identifies des cartes du jeu de cartes à collectionner Pokémon sur une photo.
+Pour CHAQUE carte visible (au maximum 9), lis :
+- "name" : le nom exactement comme imprimé (ex. "Dracaufeu ex", "Pikachu", "Ordre de la Directrice"), dans la langue imprimée
+- "number" : le numéro de collection en bas de la carte, partie avant la barre (ex. "136" pour "136/189", "TG05", "SWSH050", "GG12")
+- "total" : la partie après la barre, si présente (ex. "189"), sinon ""
+- "setCode" : le code d'extension imprimé à côté du numéro s'il est lisible (ex. "PAF", "SVI", "MEW"), sinon ""
+- "language" : "fr", "en", "ja" ou autre code
+- "variant" : "reverse" si la carte est reverse holo (le fond brille, pas l'illustration), "holo" si l'illustration brille, "first" si le logo 1re édition est présent, sinon "normal"
+Réponds UNIQUEMENT en JSON : {"cards":[{"name":"","number":"","total":"","setCode":"","language":"","variant":""}]}
+S'il n'y a aucune carte Pokémon, réponds {"cards":[]}.`;
+
+async function toB64(blob){ const buf = new Uint8Array(await blob.arrayBuffer()); let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000)); return btoa(bin); }
+async function scanFiles(files){
+  for (const file of files) {
+    const entry = {status:"busy", found:[]}; S.scan.unshift(entry); render();
+    try {
+      const img = await shrink(file);
+      const r = await fetch("/api/scan", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({image: await toB64(img), mediaType: img.type || "image/jpeg", prompt: SCAN_PROMPT})});
+      const out = await r.json().catch(() => ({}));
+      if (!r.ok) throw {code: out.error || r.status};
+      const dets = Array.isArray(out?.cards) ? out.cards : [];
+      entry.found = await Promise.all(dets.slice(0,9).map(async det => ({det, cands: await matchCard(det), sel: 0, added: false})));
+      entry.status = "done";
+    } catch(e) {
+      entry.status = "error";
+      entry.msg = e?.code === "no_key" ? "le scan n'est pas encore activé (clé ANTHROPIC_API_KEY manquante sur Vercel)." : e?.code === 429 ? "trop de scans d'un coup, réessaie dans un instant." : "analyse impossible (" + (e?.code || e?.message || "erreur") + ").";
+    }
+    render();
+  }
+}
+
+const normNum = n => String(n ?? "").trim().toUpperCase().replace(/^0+(?=\d)/, "");
+async function matchCard(det){
+  const name = (det.name || "").trim(); if (!name) return [];
+  const langs = [...new Set([det.language === "en" ? "en" : S.lang, S.lang, "en"])].filter(l => l === "fr" || l === "en");
+  let pool = [];
+  for (const l of langs) {
+    for (const q of [name, name.replace(/\s+(ex|EX|GX|V|VMAX|VSTAR|V-UNION)$/,"")]) {
+      try { const r = await j(`${API}/${l}/cards?name=${encodeURIComponent(q)}`); pool = (r||[]).map(c => ({...c, setId: c.id.slice(0, c.id.lastIndexOf("-"))})); } catch { pool = []; }
+      if (pool.length) break;
+    }
+    if (pool.length) break;
+  }
+  const num = normNum(det.number), tot = parseInt(det.total, 10);
+  const score = c => { let s = 0; if (normNum(c.localId) === num) s += 10; const set = S.catalog?.sets?.[c.setId];
+    if (set && tot && (set.official === tot)) s += 6; if (c.name.toLowerCase() === name.toLowerCase()) s += 2; return s; };
+  return pool.map(c => ({...c, _s: score(c)})).sort((a,b) => b._s - a._s);
+}
+
+/* ---------- export ---------- */
+async function exportCsv(){
+  const rows = [["Nom","Extension","Numéro","Normale","Reverse","Holo","1re éd.","État","Langue","Gradée","Note grading","Prix payé","Cote unitaire €","Valeur €","Note"]];
+  Object.values(S.coll).filter(d => qty(d)).forEach(d => rows.push([d.name, S.catalog?.sets?.[d.setId]?.name || d.setId, d.localId, d.v?.normal||0, d.v?.reverse||0, d.v?.holo||0, d.v?.first||0, d.cond||"", d.lang||"", d.grade?.co||"", d.grade?.note||"", d.paid ?? "", d.prices?.normal ?? "", (cardValue(d)??"") === "" ? "" : cardValue(d).toFixed(2), d.note||""]));
+  const csv = "﻿" + rows.map(r => r.map(x => `"${String(x).replace(/"/g,'""')}"`).join(";")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], {type:"text/csv;charset=utf-8"}));
+  const link = document.createElement("a"); link.href = url; link.download = `collection-pokemon-${today()}.csv`; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/* ---------- interactions ---------- */
+function toast(msg){ const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+function go(tab){ S.tab = tab; window.scrollTo(0,0); render(); if (tab === "search") $("#q")?.focus(); }
+
+document.addEventListener("click", e => {
+  if (e.target.closest(".scrim")) return;
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.tab) return go(b.dataset.tab);
+  if (b.dataset.lang && b.dataset.lang !== S.lang) { S.lang = b.dataset.lang; lsSet("lang", S.lang); S.setCache = {}; loadCatalog(); if (S.tab === "search") { $("#app").innerHTML = viewSearch(); } return; }
+  if (b.dataset.serie) { const id = b.dataset.serie; S.openSeries.has(id) ? S.openSeries.delete(id) : S.openSeries.add(id); lsSet("openSeries", JSON.stringify([...S.openSeries])); return render(); }
+  if (b.dataset.set) { S.setView = b.dataset.set; S.setFilter = "all"; return go("set"); }
+  if (b.dataset.filter) { S.setFilter = b.dataset.filter; return render(); }
+  if (b.dataset.list) { S.listTab = b.dataset.list; return render(); }
+  if (b.dataset.open) return openCard(b.dataset.open);
+  if (b.dataset.pick) { const [i,k,c] = b.dataset.pick.split(":").map(Number); S.scan[i].found[k].sel = c; return render(); }
+  if (b.dataset.addscan) {
+    const [i,k] = b.dataset.addscan.split(":").map(Number); const f = S.scan[i].found[k]; const c = f.cands[f.sel];
+    const variant = $(`#var-${i}-${k}`)?.value || "normal";
+    const doc = S.coll[c.id] ? {...S.coll[c.id]} : {kind:"card", cardId:c.id, setId:c.setId, name:c.name, localId:c.localId, image:c.image||"", v:{}, cond:"Near Mint", wish:false, addedAt:Date.now(), lang:(f.det.language||S.lang).toUpperCase().slice(0,2)};
+    doc.v = {...doc.v, [variant]: (doc.v?.[variant]||0) + 1}; doc.wish = false; f.added = true;
+    Store.save(doc); toast(`${c.name} ajoutée (×${qty(doc)})`); return;
+  }
+  const act = b.dataset.act;
+  if (act === "acct") return S.user ? Store.signOut() : Store.signIn();
+  if (act === "scan") return go("scan");
+  if (act === "photo") return $("#photo").click();
+  if (act === "clearscan") { S.scan = []; return render(); }
+  if (act === "refresh") return refreshPrices(b);
+  if (act === "export") return exportCsv();
+  if (act === "back") return go("series");
+  if (act === "reloadcat") return loadCatalog(true);
+  if (act === "tosearch") { go("search"); const q = $("#q"); if (q) { q.value = b.dataset.q; doSearch(b.dataset.q.trim()); } }
+});
+document.addEventListener("input", e => { if (e.target.id === "q") { clearTimeout(searchTimer); const v = e.target.value.trim(); searchTimer = setTimeout(() => doSearch(v), 350); } });
+$("#photo").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) scanFiles(files); });
+
+render();
+loadCatalog();
+Store.init();
+</script>
+
+</body>
+</html>
