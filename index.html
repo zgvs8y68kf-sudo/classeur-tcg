@@ -501,7 +501,7 @@ function viewSeries(){
 }
 function setTile(x){
   const own = ownedInSet(x.id), tot = x.official || x.total || 0, pct = tot ? Math.min(100, own/tot*100) : 0;
-  return `<button class="set" data-set="${esc(x.id)}"><div class="logo">${x.logo ? `<img src="${esc(x.logo)}.webp" alt="${esc(x.name)}" loading="lazy">` : `<span>${esc(x.name)}</span>`}</div>
+  return `<button class="set" data-set="${esc(x.id)}"><div class="logo">${x.logo ? `<img src="${esc(x.logo)}.webp" alt="${esc(x.name)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:this.alt}))">` : `<span>${esc(x.name)}</span>`}</div>
     <div class="nm">${esc(x.name)}</div><div class="bar"><i class="${pct>=100?"full":""}" style="width:${pct}%"></i></div>
     <div class="cnt"><span>${own}/${tot}</span><span>${Math.round(pct)}%</span></div></button>`;
 }
