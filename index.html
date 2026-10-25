@@ -427,7 +427,7 @@ function render(){
   if (S.tab === "home") app.innerHTML = viewHome();
   else if (S.tab === "series") app.innerHTML = viewSeries();
   else if (S.tab === "set") viewSet(app);
-  else if (S.tab === "scan") app.innerHTML = viewScan();
+  else if (S.tab === "scan") { app.innerHTML = viewScan(); setTimeout(claudeCheck, 80); }
   else if (S.tab === "search") { if (!$("#q")) app.innerHTML = viewSearch(); }
   else if (S.tab === "lists") app.innerHTML = viewLists();
 }
@@ -550,6 +550,7 @@ function viewScan(){
   <div class="drop">
     <div class="ico"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3.2"/></svg></div>
     <b style="font-size:16px">Scanner une carte Pokémon</b>
+    <div id="api-badge" style="font-size:11px;padding:3px 10px;border-radius:12px;background:#f0f0f0;color:#666;display:inline-block;margin:4px 0 0">⏳ Vérification API…</div>
     <span class="muted" style="font-size:13px;max-width:36em">Pointe la caméra vers le bas de la carte (numéro + code extension). L'identification est automatique et locale — aucun service payant.</span>
     <button class="btn primary" data-act="startvideo" style="font-size:16px;padding:14px 28px">▶ Démarrer le scanner</button>
     <button class="btn" data-act="gallery" style="font-size:13px;margin-top:4px">🖼 Depuis la galerie</button>
@@ -758,12 +759,27 @@ let _claudeReady = null;
 let _claudeCheckedAt = 0;
 async function claudeCheck() {
   if (_claudeReady && Date.now() - _claudeCheckedAt < 120_000) return _claudeReady;
+  const badge = document.getElementById("api-badge");
+  if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#f0f0f0;color:#666;display:inline-block;margin:4px 0 0"; badge.textContent = "⏳ Vérification API…"; }
+  let r, body;
   try {
-    const r = await fetch("/api/scan");
-    const body = await r.json();
+    r = await fetch("/api/scan");
+    body = await r.json();
     _claudeReady = body.ready === true;
-    if (!_claudeReady) toast(`API: HTTP ${r.status} ready=${body.ready} len=${body.len ?? "?"} node=${body.node ?? "?"}`);
-  } catch(e) { _claudeReady = false; toast("API fetch error: " + e.message); }
+  } catch(e) {
+    _claudeReady = false;
+    const msg = "❌ Erreur réseau — " + e.message;
+    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#fdd;color:#900;display:inline-block;margin:4px 0 0"; badge.textContent = msg; }
+    _claudeCheckedAt = Date.now();
+    return _claudeReady;
+  }
+  const info = `HTTP ${r.status} · clé len=${body.len ?? "?"} · ${body.node ?? ""}`;
+  if (_claudeReady) {
+    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#d4f4dd;color:#155724;display:inline-block;margin:4px 0 0"; badge.textContent = "✅ Claude Vision activé"; }
+  } else {
+    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#fdd;color:#900;display:inline-block;margin:4px 0 0"; badge.textContent = "❌ API indisponible — " + info; }
+    toast("API: " + info);
+  }
   _claudeCheckedAt = Date.now();
   return _claudeReady;
 }
