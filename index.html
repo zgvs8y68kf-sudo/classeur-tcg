@@ -939,7 +939,7 @@ async function startVideoScan(){
   inp.addEventListener("keydown", e => { if (e.key==="Enter"){ clearTimeout(searchTm); vscanSearch(inp.value.trim()); } });
 
   ov.querySelector("#vscan-photo-btn").addEventListener("click", vscanCapturePhoto);
-  ov.querySelector("#vscan-gallery-btn").addEventListener("click", () => { stopVideoScan(); setTimeout(() => $("#photo-gallery").click(), 50); });
+  ov.querySelector("#vscan-gallery-btn").addEventListener("click", () => { $("#photo-gallery").click(); stopVideoScan(); });
 
   ov.addEventListener("click", e => {
     const b = e.target.closest("[data-vscan],[data-vscard],[data-vsvar]"); if (!b) return;
