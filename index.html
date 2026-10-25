@@ -205,6 +205,7 @@ nav.tabs .scan .orb svg{width:26px;height:26px}
 </nav>
 <input type="file" id="photo" accept="image/*" capture="environment" multiple hidden>
 <input type="file" id="photo-gallery" accept="image/*" multiple hidden>
+<input type="file" id="photo-page" accept="image/*" hidden>
 
 <script>
 "use strict";
@@ -556,6 +557,7 @@ function viewScan(){
     <span class="muted" style="font-size:13px;max-width:36em">Pointe la caméra vers le bas de la carte (numéro + code extension). L'identification est automatique et locale — aucun service payant.</span>
     <button class="btn primary" data-act="startvideo" style="font-size:16px;padding:14px 28px">▶ Démarrer le scanner</button>
     <button class="btn" data-act="gallery" style="font-size:13px;margin-top:4px">🖼 Depuis la galerie</button>
+    <button class="btn" data-act="scanpage" style="font-size:13px;margin-top:4px">📄 Scanner une page (multi-cartes)</button>
   </div>
   <div style="margin-top:14px">${rows}</div>
   ${S.scan.length ? `<button class="btn" data-act="clearscan">Vider les résultats</button>` : `<p class="muted" style="font-size:13px;margin-top:14px">Astuce : tiens la carte sous une bonne lumière, fond neutre, sans reflet sur le numéro en bas à droite.</p>`}`;
@@ -811,6 +813,23 @@ async function claudeScanImage(source) {
   } catch(e) { toast("Erreur réseau scan: " + e.message); return null; }
 }
 
+async function claudeScanMulti(file) {
+  if (!await claudeCheck()) return null;
+  const MAX = 2000;
+  const bmp = await createImageBitmap(file);
+  const s = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
+  cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+  const b64 = cv.toDataURL("image/jpeg", 0.88).split(",")[1];
+  try {
+    const r = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: "image/jpeg", multi: true }) });
+    const d = await r.json();
+    if (!r.ok) { toast(`Erreur scan page ${r.status}: ${d.error || "?"}`); return null; }
+    return d.cards || null;
+  } catch(e) { toast("Erreur réseau scan page: " + e.message); return null; }
+}
+
 async function scanFiles(files) {
   const useCloud = await claudeCheck();
   toast(useCloud ? "🤖 Claude prêt" : "⚠ Claude indisponible — OCR de secours");
@@ -824,15 +843,16 @@ async function scanFiles(files) {
     try {
       let name = "", number = "", total = "", setCode = "";
 
+      let r = null;
       if (useCloud) {
         // Claude Vision : envoie la photo complète
-        const r = await claudeScanImage(file);
+        r = await claudeScanImage(file);
         if (r) {
           number = r.number || ""; total = r.total || ""; setCode = r.setCode || ""; name = r.name || "";
           const info = [name, number && (number + (total ? "/"+total : "")), setCode].filter(Boolean).join(" · ");
           if (info) toast("Claude : " + info); else toast("Claude : rien détecté — mauvaise photo ?");
         } else { toast("Claude indisponible ou erreur réseau"); }
-      } else {
+      } else { // Tesseract
         // Tesseract : crop nom (haut) + numéro (bas)
         const bmp = await createImageBitmap(file);
         const W = bmp.width, H = bmp.height;
@@ -847,11 +867,9 @@ async function scanFiles(files) {
       }
 
       let cands = number ? await lookupCard(number, total, setCode) : [];
-      if (!cands.length) {
-        const det2 = { name, number, total, setCode, language: S.lang, variant: "normal" };
-        cands = await matchCard(det2);
-      }
-      const det = { name, number, total, setCode, language: S.lang, variant: "normal" };
+      // det inclut hp/language/regulation pour affiner le scoring de matchCard
+      const det = { name, number, total, setCode, language: r?.language || S.lang, variant: "normal", hp: r?.hp || null, regulation: r?.regulation || null };
+      if (!cands.length) cands = await matchCard(det);
       entry.found = [{ det, cands, sel: 0, added: false }];
       entry.status = "done";
       entry.debug = (useCloud ? "Claude" : "OCR") + (name||number ? ` → ${[name, number && (number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ")}` : " → rien détecté");
@@ -861,6 +879,29 @@ async function scanFiles(files) {
     }
     render();
   }
+}
+
+async function scanPageFiles(file) {
+  if (!await claudeCheck()) { toast("Claude indisponible — le scan de page nécessite Claude Vision."); return; }
+  const entry = { status: "busy", found: [] }; S.scan.unshift(entry); render();
+  try {
+    const cards = await claudeScanMulti(file);
+    if (!cards || !cards.length) { entry.status = "error"; entry.msg = "aucune carte détectée sur cette page."; render(); return; }
+    toast(`Claude : ${cards.length} carte(s) détectée(s)`);
+    const found = await Promise.all(cards.map(async r => {
+      const det = { name: r.name || "", number: r.number || "", total: r.total || "", setCode: r.setCode || "", language: r.language || S.lang, variant: "normal", hp: r.hp || null, regulation: r.regulation || null };
+      let cands = det.number ? await lookupCard(det.number, det.total, det.setCode) : [];
+      if (!cands.length) cands = await matchCard(det);
+      return { det, cands, sel: 0, added: false };
+    }));
+    entry.found = found;
+    entry.status = "done";
+    entry.debug = `Claude page → ${cards.length} carte(s)`;
+  } catch(e) {
+    entry.status = "error";
+    entry.msg = "analyse impossible (" + (e?.message || "erreur") + ").";
+  }
+  render();
 }
 
 const normNum = n => String(n ?? "").trim().toUpperCase().replace(/^0+(?=\d)/, "");
@@ -876,8 +917,16 @@ async function matchCard(det){
     if (pool.length) break;
   }
   const num = normNum(det.number), tot = parseInt(det.total, 10);
-  const score = c => { let s = 0; if (normNum(c.localId) === num) s += 10; const set = S.catalog?.sets?.[c.setId];
-    if (set && tot && (set.official === tot)) s += 6; if (c.name.toLowerCase() === name.toLowerCase()) s += 2; return s; };
+  const score = c => {
+    let s = 0;
+    if (normNum(c.localId) === num) s += 10;
+    const set = S.catalog?.sets?.[c.setId];
+    if (set && tot && (set.official === tot)) s += 6;
+    if (c.name.toLowerCase() === name.toLowerCase()) s += 2;
+    if (det.hp   && Number(c.hp) === Number(det.hp)) s += 3;
+    if (det.regulation && c.regulationMark && c.regulationMark.toUpperCase() === String(det.regulation).toUpperCase()) s += 2;
+    return s;
+  };
   return pool.map(c => ({...c, _s: score(c)})).sort((a,b) => b._s - a._s);
 }
 
@@ -1231,6 +1280,7 @@ document.addEventListener("click", e => {
   if (act === "startvideo") return startVideoScan();
   if (act === "photo") return $("#photo").click();
   if (act === "gallery") return $("#photo-gallery").click();
+  if (act === "scanpage") return $("#photo-page").click();
   if (act === "clearscan") { S.scan = []; return render(); }
   if (act === "refresh") return refreshPrices(b);
   if (act === "export") return exportCsv();
@@ -1241,6 +1291,7 @@ document.addEventListener("click", e => {
 document.addEventListener("input", e => { if (e.target.id === "q") { clearTimeout(searchTimer); const v = e.target.value.trim(); searchTimer = setTimeout(() => doSearch(v), 350); } });
 $("#photo").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) scanFiles(files); });
 $("#photo-gallery").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) scanFiles(files); });
+$("#photo-page").addEventListener("change", e => { const file = e.target.files[0]; e.target.value = ""; if (file) scanPageFiles(file); });
 
 render();
 loadCatalog();
