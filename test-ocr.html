@@ -77,12 +77,14 @@ const status = msg => { document.getElementById('status').textContent = msg; };
 
 // Créer un worker Tesseract avec les chemins locaux
 async function makeWorker(logId) {
-  log(logId, '⏳ Création du worker…\n  workerPath = /tesseract/worker.min.js\n  corePath   = /tesseract/tesseract-core-lstm.wasm.js\n  langPath   = /tesseract/lang/');
+  const _o = location.origin;
+  log(logId, '⏳ Création du worker…\n  origin     = ' + _o + '\n  workerPath = ' + _o + '/tesseract/worker.min.js\n  corePath   = ' + _o + '/tesseract/tesseract-core-lstm.wasm.js\n  langPath   = ' + _o + '/tesseract/lang/\n  workerBlobURL = false');
   const t0 = Date.now();
   const worker = await Tesseract.createWorker('eng', 1, {
-    workerPath: '/tesseract/worker.min.js',
-    corePath:   '/tesseract/tesseract-core-lstm.wasm.js',
-    langPath:   '/tesseract/lang/',
+    workerPath:    _o + '/tesseract/worker.min.js',
+    corePath:      _o + '/tesseract/tesseract-core-lstm.wasm.js',
+    langPath:      _o + '/tesseract/lang/',
+    workerBlobURL: false,
     logger: m => {
       const cur = document.getElementById(logId).textContent;
       document.getElementById(logId).textContent = cur + '\n[' + m.status + '] ' + Math.round((m.progress||0)*100) + '%';

@@ -686,10 +686,12 @@ let _ocrWorker = null;
 async function getOcrWorker() {
   if (_ocrWorker) return _ocrWorker;
   if (!window.Tesseract) throw new Error("Tesseract.js non disponible");
+  const _o = location.origin;
   _ocrWorker = await Tesseract.createWorker("eng", 1, {
-    workerPath: "/tesseract/worker.min.js",
-    corePath:   "/tesseract/tesseract-core-lstm.wasm.js",
-    langPath:   "/tesseract/lang/",
+    workerPath:    _o + "/tesseract/worker.min.js",
+    corePath:      _o + "/tesseract/tesseract-core-lstm.wasm.js",
+    langPath:      _o + "/tesseract/lang/",
+    workerBlobURL: false,
     logger: () => {},
   });
   // Restreindre aux chiffres et "/" — réduit les faux positifs
@@ -1009,10 +1011,12 @@ async function vscanCapturePhoto(){
   // 2. Tesseract one-shot (fallback)
   if (!normNum(number) && window.Tesseract) {
     try {
+      const _o2 = location.origin;
       const r = await Tesseract.recognize(numCv, "eng", {
-        workerPath: "/tesseract/worker.min.js",
-        corePath:   "/tesseract/tesseract-core-lstm.wasm.js",
-        langPath:   "/tesseract/lang/",
+        workerPath:    _o2 + "/tesseract/worker.min.js",
+        corePath:      _o2 + "/tesseract/tesseract-core-lstm.wasm.js",
+        langPath:      _o2 + "/tesseract/lang/",
+        workerBlobURL: false,
         logger: ()=>{},
       }, { pageseg_mode: "11", tessedit_char_whitelist: "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ" });
       const p = parseOcrNumber(r.data.text.trim()); number = p.number; total = p.total;
