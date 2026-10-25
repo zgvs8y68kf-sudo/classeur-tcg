@@ -234,7 +234,7 @@ const Store = {
         this.migrateLocal();
         this.unsub = fs.onSnapshot(fs.collection(db, "users", user.uid, "cards"), snap => {
           const coll = {}; snap.forEach(d => { const x = d.data(); if (x && x.cardId) coll[x.cardId] = x; });
-          S.coll = coll; render();
+          S.coll = coll; render(); if (!this._snapped) { this._snapped = true; autoRefreshIfStale(); }
         }, e => toast("Synchronisation coupée : " + (e.code || e.message)));
         fs.getDoc(fs.doc(db, "users", user.uid, "meta", "history")).then(d => { S.history = d.exists() ? (d.data().points || []) : []; render(); }).catch(() => {});
       });
@@ -255,7 +255,7 @@ const Store = {
   },
   loadLocal(){
     try { S.coll = JSON.parse(lsGet("coll") || "{}"); S.history = JSON.parse(lsGet("hist") || "[]"); } catch { S.coll = {}; S.history = []; }
-    render();
+    render(); autoRefreshIfStale();
   },
   async save(card){
     card = JSON.parse(JSON.stringify(card));
@@ -351,13 +351,19 @@ async function refreshPrices(btn){
     if (btn) btn.textContent = `Prix… ${done}/${docs.length}`;
     if (!c?.pricing) return;
     const prices = {}; for (const [k] of VARIANTS) prices[k] = priceOf(c.pricing, k).main;
-    if (JSON.stringify(prices) !== JSON.stringify(d.prices)) await Store.save({...S.coll[d.cardId] || d, prices, priceAt: Date.now()});
+    if (JSON.stringify(prices) !== JSON.stringify(d.prices)) await Store.save({...S.coll[d.cardId] || d, prices, priceSource:"Cardmarket via TCGdex", priceAt: Date.now()});
   });
   const total = totals().value;
   const h = S.history.filter(p => p.d !== today()); h.push({d: today(), v: Math.round(total*100)/100});
   S.history = h.slice(-400); await Store.saveHistory();
   if (btn) { btn.disabled = false; btn.textContent = "Actualiser les prix"; }
   toast("Prix à jour"); render();
+}
+
+function autoRefreshIfStale(){
+  const docs = Object.values(S.coll); if (!docs.length) return;
+  const lastAt = docs.reduce((m, d) => Math.max(m, d.priceAt || 0), 0);
+  if (Date.now() - lastAt > 23 * 3600e3) setTimeout(() => refreshPrices(null), 800);
 }
 
 function totals(){
@@ -404,6 +410,8 @@ function itemRow(d, right){
 
 function viewHome(){
   const t = totals(), h = S.history;
+  const lastAt = Object.values(S.coll).reduce((m, d) => Math.max(m, d.priceAt || 0), 0);
+  const lastStr = lastAt ? `Mise à jour le ${new Date(lastAt).toLocaleDateString("fr-FR")} à ${new Date(lastAt).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}` : null;
   const prev = h.length > 1 ? h[h.length-2].v : null, last = h.length ? h[h.length-1].v : null;
   const delta = prev != null && last != null ? last - prev : null;
   const top = Object.values(S.coll).filter(d => qty(d)).map(d => ({d, v: cardValue(d)})).filter(x => x.v).sort((a,b) => b.v - a.v).slice(0, 8);
@@ -426,6 +434,7 @@ function viewHome(){
       <button class="btn" id="refresh" data-act="refresh" ${empty?"disabled":""}>Actualiser les prix</button>
       <button class="btn" data-act="export" ${empty?"disabled":""}>Exporter (CSV)</button>
     </div>
+    ${lastStr ? `<p class="muted" style="font-size:12px;margin:10px 0 0">${lastStr} · Cardmarket via TCGdex</p>` : ""}
   </section>
   ${empty ? `<div class="empty"><p style="font-size:16px;color:var(--fg);font-weight:600;margin:0 0 6px">Ton classeur est vide</p><p style="margin:0">Scanne une carte (ou une page de classeur entière) avec le bouton rouge, ou ouvre <b>Séries</b> pour cocher tes cartes à la main.</p></div>` : `
   <h2>Cartes les plus chères</h2>
@@ -605,7 +614,7 @@ async function openCard(id){
       <button class="btn primary" id="okbtn">Fermer</button></div>`;
   };
   const commit = () => {
-    doc = {...doc, prices, priceAt: Date.now(), cond: $("#f-cond",scrim).value, lang: $("#f-lang",scrim).value,
+    doc = {...doc, prices, priceSource:"Cardmarket via TCGdex", priceAt: Date.now(), cond: $("#f-cond",scrim).value, lang: $("#f-lang",scrim).value,
       paid: $("#f-paid",scrim).value === "" ? null : +$("#f-paid",scrim).value, note: $("#f-note",scrim).value.trim(),
       grade: $("#f-gco",scrim).value ? {co: $("#f-gco",scrim).value, note: $("#f-gnote",scrim).value.trim(), value: $("#f-gval",scrim).value === "" ? null : +$("#f-gval",scrim).value} : null};
     if (!doc.addedAt && qty(doc)) doc.addedAt = Date.now();
@@ -710,7 +719,9 @@ document.addEventListener("click", e => {
     const variant = $(`#var-${i}-${k}`)?.value || "normal";
     const doc = S.coll[c.id] ? {...S.coll[c.id]} : {kind:"card", cardId:c.id, setId:c.setId, name:c.name, localId:c.localId, image:c.image||"", v:{}, cond:"Near Mint", wish:false, addedAt:Date.now(), lang:(f.det.language||S.lang).toUpperCase().slice(0,2)};
     doc.v = {...doc.v, [variant]: (doc.v?.[variant]||0) + 1}; doc.wish = false; f.added = true;
-    Store.save(doc); toast(`${c.name} ajoutée (×${qty(doc)})`); return;
+    Store.save(doc); toast(`${c.name} ajoutée (×${qty(doc)})`);
+    if (!doc.prices) loadCard(c.id).then(cd => { if (!cd?.pricing) return; const prices = {}; for (const [vk] of VARIANTS) prices[vk] = priceOf(cd.pricing, vk).main; const cur = S.coll[c.id]; if (cur) Store.save({...cur, prices, priceSource:"Cardmarket via TCGdex", priceAt:Date.now()}); }).catch(()=>{});
+    return;
   }
   const act = b.dataset.act;
   if (act === "acct") return S.user ? Store.signOut() : Store.signIn();
