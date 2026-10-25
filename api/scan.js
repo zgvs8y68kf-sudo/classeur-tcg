@@ -23,7 +23,8 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(204).end();
 
   if (req.method === "GET") {
-    return res.status(200).json({ ready: Boolean(process.env.ANTHROPIC_API_KEY) });
+    const key = process.env.ANTHROPIC_API_KEY || "";
+    return res.status(200).json({ ready: key.length > 10, len: key.length, node: process.version });
   }
   if (req.method !== "POST") return res.status(405).json({ error: "method" });
 

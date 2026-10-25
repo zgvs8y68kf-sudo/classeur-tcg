@@ -758,8 +758,12 @@ let _claudeReady = null;
 let _claudeCheckedAt = 0;
 async function claudeCheck() {
   if (_claudeReady && Date.now() - _claudeCheckedAt < 120_000) return _claudeReady;
-  try { const r = await fetch("/api/scan"); _claudeReady = (await r.json()).ready === true; }
-  catch { _claudeReady = false; }
+  try {
+    const r = await fetch("/api/scan");
+    const body = await r.json();
+    _claudeReady = body.ready === true;
+    if (!_claudeReady) toast(`API: HTTP ${r.status} ready=${body.ready} len=${body.len ?? "?"} node=${body.node ?? "?"}`);
+  } catch(e) { _claudeReady = false; toast("API fetch error: " + e.message); }
   _claudeCheckedAt = Date.now();
   return _claudeReady;
 }
