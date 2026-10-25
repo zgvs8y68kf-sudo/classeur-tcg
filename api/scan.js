@@ -59,7 +59,7 @@ export default async function handler(req, res) {
         testRes = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: { "x-api-key": antKey, "anthropic-version": "2026-10-21", "content-type": "application/json" },
-          body: JSON.stringify({ model: process.env.SCAN_MODEL || "claude-haiku-5-5", max_tokens: 3, messages: [{ role: "user", content: "hi" }] }),
+          body: JSON.stringify({ model: process.env.SCAN_MODEL || "claude-opus-5-5", max_tokens: 3, messages: [{ role: "user", content: "hi" }] }),
         });
         testData = await testRes.json();
       }
@@ -111,7 +111,7 @@ export default async function handler(req, res) {
 
     } else {
       // Anthropic fallback
-      const model = process.env.SCAN_MODEL || "claude-haiku-5-5";
+      const model = process.env.SCAN_MODEL || "claude-opus-5-5";
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "x-api-key": antKey, "anthropic-version": "2026-10-21", "content-type": "application/json" },
