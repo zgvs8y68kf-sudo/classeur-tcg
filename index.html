@@ -685,13 +685,8 @@ let _ocrWorker = null;
 async function getOcrWorker() {
   if (_ocrWorker) return _ocrWorker;
   if (!window.Tesseract) throw new Error("Tesseract.js non disponible");
-  // Chemins explicites requis pour le chargement CDN sans bundler
-  _ocrWorker = await Tesseract.createWorker("eng", 1, {
-    workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js",
-    corePath:   "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.0.0/tesseract-core-simd-lstm.wasm.js",
-    langPath:   "https://tessdata.projectnaptha.com/4.0.0",
-    logger: () => {},
-  });
+  // Pas de chemins explicites : Tesseract.js déduit les URLs depuis son propre <script src>
+  _ocrWorker = await Tesseract.createWorker("eng", 1, { logger: () => {} });
   return _ocrWorker;
 }
 
@@ -857,8 +852,7 @@ async function startVideoScan(){
     <div id="vscan-bottom">
       <div id="vscan-inputrow">
         <input id="vscan-q" class="search" type="search" placeholder="Numéro (136/189) ou nom de la carte…" autocomplete="off" inputmode="search" enterkeyhint="search">
-        <button class="btn" id="vscan-photo-btn" title="Prendre une photo" style="flex-shrink:0;font-size:20px;padding:0 10px">📷</button>
-        <input type="file" id="vscan-photo-in" accept="image/*" capture="environment" style="display:none">
+        <button class="btn" id="vscan-photo-btn" title="Capturer ce cadre" style="flex-shrink:0;font-size:20px;padding:0 10px">📷</button>
       </div>
       <div id="vscan-results"><p class="muted" style="font-size:13px;margin:0">L'OCR remplit ce champ automatiquement — ou tape directement.</p></div>
       <div id="vscan-confirm" hidden>
@@ -884,10 +878,7 @@ async function startVideoScan(){
   });
   inp.addEventListener("keydown", e => { if (e.key==="Enter"){ clearTimeout(searchTm); vscanSearch(inp.value.trim()); } });
 
-  ov.querySelector("#vscan-photo-btn").addEventListener("click", () => ov.querySelector("#vscan-photo-in").click());
-  ov.querySelector("#vscan-photo-in").addEventListener("change", e => {
-    const f = e.target.files[0]; e.target.value = ""; if (f) vscanCapturePhoto(f);
-  });
+  ov.querySelector("#vscan-photo-btn").addEventListener("click", vscanCapturePhoto);
 
   ov.addEventListener("click", e => {
     const b = e.target.closest("[data-vscan],[data-vscard],[data-vsvar]"); if (!b) return;
@@ -962,32 +953,28 @@ function vscanBadge(text){
   if (b){ b.textContent = text; b.classList.toggle("found", text.includes("✓")); }
 }
 
-async function vscanCapturePhoto(file){
+async function vscanCapturePhoto(){
+  const vid = document.getElementById("vscan-vid");
+  if (!vid || vid.readyState < 2) { vscanBadge("Caméra pas prête"); return; }
+  const W = vid.videoWidth, H = vid.videoHeight;
+  if (!W) { vscanBadge("Pas de signal vidéo"); return; }
+  vscanBadge("Analyse du cadre…");
+
+  // Capture le frame courant
+  const frame = document.createElement("canvas"); frame.width = W; frame.height = H;
+  frame.getContext("2d").drawImage(vid, 0, 0);
+
   const inp = document.getElementById("vscan-q");
-  vscanBadge("Analyse de la photo…");
   try {
-    const bmp = await createImageBitmap(file);
-    const W = bmp.width, H = bmp.height;
-    // Zone numéro : bas de la carte
-    const numCv = buildOcrCanvas(bmp, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
-    let numText = "";
-    if (window.Tesseract) {
-      // Tesseract.recognize() : API one-shot CDN, plus fiable que le worker persistant
-      const r = await Tesseract.recognize(numCv, "eng", {logger:()=>{}});
-      numText = r.data.text.trim();
-    }
-    const {number, total} = parseOcrNumber(numText);
+    const numCv = buildOcrCanvas(frame, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
+    if (!window.Tesseract) throw new Error("Tesseract.js non chargé");
+    const r = await Tesseract.recognize(numCv, "eng", {logger:()=>{}});
+    const {number, total} = parseOcrNumber(r.data.text.trim());
     const query = normNum(number) ? `${normNum(number)}${total?"/"+total:""}` : "";
-    if (query) {
-      if (inp) inp.value = query;
-      vscanSearch(query);
-      vscanBadge(`Photo : ${query} ✓`);
-    } else {
-      vscanBadge("Numéro non lu — tape-le manuellement");
-      if (inp) inp.focus();
-    }
+    if (query) { if (inp) inp.value = query; vscanSearch(query); vscanBadge(`${query} ✓`); }
+    else { vscanBadge("Numéro non lu — tape-le"); if (inp) inp.focus(); }
   } catch(e) {
-    vscanBadge("Erreur OCR — tape le numéro");
+    vscanBadge("OCR indisponible — tape le numéro");
     if (inp) inp.focus();
   }
 }
