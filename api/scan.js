@@ -44,7 +44,31 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") {
     const prefix = key.slice(0, 14);
-    return res.status(200).json({ ready: key.length > 10, len: key.length, prefix, provider, node: process.version });
+    if (!key) return res.status(200).json({ ready: false, provider: "none", prefix: "", node: process.version, msg: "Aucune clé API configurée dans Vercel" });
+    // Vrai test : appel minimal sans image pour vérifier authentification + quota
+    try {
+      let testRes, testData;
+      if (provider === "openrouter") {
+        testRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${orKey}`, "HTTP-Referer": "https://classeur-tcg.vercel.app", "Content-Type": "application/json" },
+          body: JSON.stringify({ model: process.env.SCAN_MODEL || "qwen/qwen2.5-vl-32b-instruct:free", max_tokens: 3, messages: [{ role: "user", content: "hi" }] }),
+        });
+        testData = await testRes.json();
+      } else {
+        testRes = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": antKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify({ model: process.env.SCAN_MODEL || "claude-3-5-haiku-20241022", max_tokens: 3, messages: [{ role: "user", content: "hi" }] }),
+        });
+        testData = await testRes.json();
+      }
+      const ok = testRes.ok;
+      const msg = !ok ? (testData?.error?.message || testData?.message || `HTTP ${testRes.status}`).slice(0, 100) : "";
+      return res.status(200).json({ ready: ok, provider, prefix, node: process.version, msg });
+    } catch (e) {
+      return res.status(200).json({ ready: false, provider, prefix, node: process.version, msg: "Erreur réseau : " + e.message });
+    }
   }
   if (req.method !== "POST") return res.status(405).json({ error: "method" });
   if (!key) return res.status(501).json({ error: "no_key", message: "Ajoute OPENROUTER_API_KEY dans Vercel" });
