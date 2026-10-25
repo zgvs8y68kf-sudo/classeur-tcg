@@ -536,7 +536,8 @@ function viewScan(){
   const rows = S.scan.map((s, i) => {
     if (s.status === "busy") return `<div class="det"><span class="spinner"></span> Analyse de la photo ${i+1}…</div>`;
     if (s.status === "error") return `<div class="det"><b>Photo ${i+1}</b> — ${esc(s.msg)}</div>`;
-    return s.found.map((f, k) => `<div class="det">
+    const dbg = s.debug ? `<p class="muted" style="font-size:11px;margin:0 0 6px">${esc(s.debug)}</p>` : "";
+    return dbg + s.found.map((f, k) => `<div class="det">
       <div class="row" style="justify-content:space-between"><b>${esc(f.det.name || "Carte")} <span class="muted num">${esc(f.det.number||"?")}${f.det.total?"/"+esc(f.det.total):""}</span></b>
       ${f.added ? `<span class="up" style="font-weight:700">Ajoutée ✓</span>` : ""}</div>
       ${f.cands.length ? `<div class="cand">${f.cands.slice(0,12).map((c,ci) => `<button data-pick="${i}:${k}:${ci}" aria-pressed="${f.sel===ci}"><img src="${esc(c.image ? c.image+"/low.webp" : "")}" alt="" loading="lazy"><small>${esc(S.catalog?.sets?.[c.setId]?.name || c.setId)}</small></button>`).join("")}</div>
@@ -788,6 +789,7 @@ async function claudeScanImage(source) {
 
 async function scanFiles(files) {
   const useCloud = await claudeCheck();
+  toast(useCloud ? "🤖 Claude prêt" : "⚠ Claude indisponible — OCR de secours");
   let worker = null;
   if (!useCloud) {
     try { worker = await getOcrWorker(); } catch(e) { toast("Tesseract.js non chargé — réessaie dans un instant."); return; }
@@ -828,6 +830,7 @@ async function scanFiles(files) {
       const det = { name, number, total, setCode, language: S.lang, variant: "normal" };
       entry.found = [{ det, cands, sel: 0, added: false }];
       entry.status = "done";
+      entry.debug = (useCloud ? "Claude" : "OCR") + (name||number ? ` → ${[name, number && (number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ")}` : " → rien détecté");
     } catch(e) {
       entry.status = "error";
       entry.msg = "analyse impossible (" + (e?.message || "erreur") + ").";
