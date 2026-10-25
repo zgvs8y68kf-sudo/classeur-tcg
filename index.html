@@ -219,7 +219,7 @@ const GRADERS = ["","PCA","PSA","CGC","BGS","Collect Aura"];
 
 /* Table des codes imprimés sur les cartes → identifiants TCGdex */
 const PRINT_CODE = {
-  "SVI":"sv1","PAL":"sv2","OBF":"sv3","PAF":"sv3pt5","TEF":"sv5","TWM":"sv6","SCR":"sv7","SSP":"sv8","PRE":"sv9","SFA":"sv4pt5","PRE":"sv9",
+  "SVI":"sv1","PAL":"sv2","OBF":"sv3","PAF":"sv3pt5","TEF":"sv5","TWM":"sv6","SCR":"sv7","SSP":"sv8","PRE":"sv9","SFA":"sv4pt5",
   "SSH":"swsh1","RCL":"swsh2","DAA":"swsh3","VIV":"swsh4","BST":"swsh5","CRE":"swsh6","EVS":"swsh7",
   "FST":"swsh8","BRS":"swsh9","ASR":"swsh10","LOR":"swsh11","SIT":"swsh12","CRZ":"swsh12pt5",
   "SUM":"sm1","GRI":"sm2","BUS":"sm3","CIN":"sm35","UPR":"sm5","FLI":"sm6","CES":"sm7",
@@ -291,8 +291,10 @@ const Store = {
     let local = {}; try { local = JSON.parse(lsGet("coll") || "{}"); } catch {}
     const ids = Object.keys(local); if (!ids.length) return;
     const {fs, db} = this.fb;
-    for (const id of ids) { try { await fs.setDoc(fs.doc(db, "users", this.uid, "cards", id), local[id], {merge: true}); } catch {} }
-    lsSet("coll", "{}"); toast(ids.length + " carte(s) locale(s) envoyée(s) dans ton compte");
+    const ok = [];
+    for (const id of ids) { try { await fs.setDoc(fs.doc(db, "users", this.uid, "cards", id), local[id], {merge: true}); ok.push(id); } catch {} }
+    if (ok.length) { const left = Object.fromEntries(Object.entries(local).filter(([id]) => !ok.includes(id))); lsSet("coll", JSON.stringify(left)); }
+    toast(ok.length + "/" + ids.length + " carte(s) locale(s) envoyée(s) dans ton compte");
   },
   loadLocal(){
     try { S.coll = JSON.parse(lsGet("coll") || "{}"); S.history = JSON.parse(lsGet("hist") || "[]"); } catch { S.coll = {}; S.history = []; }
@@ -1043,7 +1045,7 @@ function stopVideoScan(){
 
 async function analyzeFrame(vid){
   if (VS.busy || vid.readyState < 2) return;
-  if (!(document.getElementById("vscan-confirm")?.hidden)) return;
+  if (VS.cooldown && Date.now() < VS.cooldown) return;
   const W = vid.videoWidth, H = vid.videoHeight; if (!W) return;
   VS.busy = true;
   let number = "", total = "", setCode = "";
@@ -1060,9 +1062,11 @@ async function analyzeFrame(vid){
     }
   } catch(e){}
 
-  if (!normNum(number)){ VS.buffer = []; VS.busy = false; return; }
+  if (!normNum(number)){ VS.buffer = []; VS._lastNum = ""; VS.busy = false; return; }
 
-  const cands = await lookupCard(number, total, setCode).catch(()=>[]);
+  const numKey = normNum(number) + "/" + (total||"") + "/" + (setCode||"");
+  let cands = VS._lastNum === numKey ? VS._lastCands : null;
+  if (!cands) { cands = await lookupCard(number, total, setCode).catch(()=>[]); VS._lastNum = numKey; VS._lastCands = cands; }
   if (!cands.length){ vscanBadge(`${normNum(number)}${total?"/"+total:""} — introuvable`); VS.buffer = []; VS.busy = false; return; }
 
   const topId = cands[0].id;
@@ -1169,6 +1173,7 @@ async function vscanSearch(q, codeHint = ""){
 
 function _vscanDoAdd(c, resDiv) {
   if (window._vsAutoAdd) { clearInterval(window._vsAutoAdd); window._vsAutoAdd = null; }
+  VS.cooldown = Date.now() + 3500; VS._lastNum = "";
   const variant = VS.currentVariant || "normal";
   const doc = S.coll[c.id] ? {...S.coll[c.id]} : {kind:"card",cardId:c.id,setId:c.setId,name:c.name,localId:c.localId,image:c.image||"",v:{},cond:"Near Mint",wish:false,addedAt:Date.now(),lang:S.lang.toUpperCase().slice(0,2)};
   doc.v = {...doc.v,[variant]:(doc.v?.[variant]||0)+1}; doc.wish = false;
@@ -1177,9 +1182,7 @@ function _vscanDoAdd(c, resDiv) {
   VS.currentCands=null; VS.currentSel=0; VS.currentVariant="normal"; VS.buffer=[];
   document.getElementById("vscan-vars")?.querySelectorAll("[data-vsvar]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.vsvar==="normal"));
   const inp=document.getElementById("vscan-q"); if(inp) inp.value="";
-  const cf=document.getElementById("vscan-confirm"); if(cf) cf.hidden=true;
-  const sn = id => S.catalog?.sets?.[id]?.name?.slice(0,14) || id;
-  if (resDiv?.isConnected) resDiv.innerHTML=`<div style="font-size:13px;color:var(--text);padding:2px 0">✅ <b>${esc(c.name)}</b> <span style="color:var(--muted);font-size:11px">${esc(sn(c.setId))}</span><br><span style="font-size:11px;color:var(--muted)">Pointe la carte suivante.</span></div>`;
+  if (resDiv?.isConnected) resDiv.innerHTML=`<div style="font-size:13px;color:var(--text);padding:2px 0">✅ <b>${esc(c.name)}</b> <span style="color:var(--muted);font-size:11px">${esc(S.catalog?.sets?.[c.setId]?.name?.slice(0,14)||c.setId)}</span><br><span style="font-size:11px;color:var(--muted)">Pointe la carte suivante.</span></div>`;
   vscanBadge("✓ " + c.name.slice(0,20));
   setTimeout(()=>vscanBadge("Pointe le bas de la carte"),2500);
 }
