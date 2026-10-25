@@ -775,9 +775,10 @@ async function claudeCheck() {
   }
   const info = `len=${body.len ?? "?"} · prefix=${body.prefix ?? "?"} · ${body.node ?? ""}`;
   if (_claudeReady) {
-    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#d4f4dd;color:#155724;display:inline-block;margin:4px 0 0"; badge.textContent = "✅ Claude Vision activé"; }
+    const providerLabel = body.provider === "openrouter" ? "OpenRouter (gratuit)" : body.provider === "anthropic" ? "Anthropic" : "IA";
+    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#d4f4dd;color:#155724;display:inline-block;margin:4px 0 0"; badge.textContent = `✅ Vision IA · ${providerLabel}`; }
   } else {
-    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#fdd;color:#900;display:inline-block;margin:4px 0 0"; badge.textContent = "❌ clé invalide — " + info; }
+    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#fdd;color:#900;display:inline-block;margin:4px 0 0"; badge.textContent = "❌ clé manquante — " + info; }
     toast("API: " + info);
   }
   _claudeCheckedAt = Date.now();
