@@ -24,7 +24,8 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") {
     const key = process.env.ANTHROPIC_API_KEY || "";
-    return res.status(200).json({ ready: key.length > 10, len: key.length, node: process.version });
+    const prefix = key.slice(0, 14); // "sk-ant-api03-x" vs "sk-ant-usr-1SE" — visible without exposing the full key
+    return res.status(200).json({ ready: key.length > 10, len: key.length, prefix, node: process.version });
   }
   if (req.method !== "POST") return res.status(405).json({ error: "method" });
 
@@ -61,7 +62,8 @@ export default async function handler(req, res) {
     });
     const data = await r.json();
     if (!r.ok) {
-      return res.status(r.status === 429 ? 429 : 502).json({ error: data?.error?.type || "upstream" });
+      const errMsg = data?.error?.message || "";
+      return res.status(r.status === 429 ? 429 : 502).json({ error: data?.error?.type || "upstream", message: errMsg.slice(0, 120), status: r.status });
     }
 
     const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("").trim();

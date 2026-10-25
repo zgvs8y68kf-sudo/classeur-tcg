@@ -773,11 +773,11 @@ async function claudeCheck() {
     _claudeCheckedAt = Date.now();
     return _claudeReady;
   }
-  const info = `HTTP ${r.status} · clé len=${body.len ?? "?"} · ${body.node ?? ""}`;
+  const info = `len=${body.len ?? "?"} · prefix=${body.prefix ?? "?"} · ${body.node ?? ""}`;
   if (_claudeReady) {
     if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#d4f4dd;color:#155724;display:inline-block;margin:4px 0 0"; badge.textContent = "✅ Claude Vision activé"; }
   } else {
-    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#fdd;color:#900;display:inline-block;margin:4px 0 0"; badge.textContent = "❌ API indisponible — " + info; }
+    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#fdd;color:#900;display:inline-block;margin:4px 0 0"; badge.textContent = "❌ clé invalide — " + info; }
     toast("API: " + info);
   }
   _claudeCheckedAt = Date.now();
@@ -801,10 +801,10 @@ async function claudeScanImage(source) {
   const b64 = cv.toDataURL("image/jpeg", 0.88).split(",")[1];
   try {
     const r = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: "image/jpeg" }) });
-    if (!r.ok) return null;
     const d = await r.json();
+    if (!r.ok) { toast(`Erreur Claude ${r.status}: ${d.error || "?"} — ${(d.message || "").slice(0, 80)}`); return null; }
     return d.error ? null : d;
-  } catch { return null; }
+  } catch(e) { toast("Erreur réseau scan: " + e.message); return null; }
 }
 
 async function scanFiles(files) {
