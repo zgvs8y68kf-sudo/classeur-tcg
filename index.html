@@ -887,8 +887,20 @@ async function lookupInSet(setId, localId, lang){
   if (Object.prototype.hasOwnProperty.call(S.setCache, ck)) return S.setCache[ck];
   try {
     const c = await j(`${API}/${lang}/cards/${encodeURIComponent(cardId)}`);
-    return (S.setCache[ck] = c?.id ? {...c, setId} : null);
-  } catch { return (S.setCache[ck] = null); }
+    if (c?.id) return (S.setCache[ck] = {...c, setId});
+  } catch {}
+  // TCGdex stocke souvent les numéros à 3 chiffres (73 → 073)
+  if (/^\d+$/.test(normId) && normId.length < 3) {
+    const padded = normId.padStart(3, "0");
+    const cardId2 = `${setId}-${padded}`;
+    const ck2 = `c:${lang}:${cardId2}`;
+    if (Object.prototype.hasOwnProperty.call(S.setCache, ck2)) return S.setCache[ck2];
+    try {
+      const c2 = await j(`${API}/${lang}/cards/${encodeURIComponent(cardId2)}`);
+      return (S.setCache[ck2] = c2?.id ? {...c2, setId} : null);
+    } catch {}
+  }
+  return (S.setCache[ck] = null);
 }
 
 /* Identification par numéro + total (+ hint code d'extension) */
