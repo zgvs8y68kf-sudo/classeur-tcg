@@ -815,8 +815,15 @@ async function scanFiles(files) {
       const bmp = await createImageBitmap(file);
       const card = detectCard(bmp);
       const { x: cx, y: cy, w: cw, h: ch } = card;
-      const nameCanvas = buildOcrCanvas(bmp, cx + Math.round(cw*0.06), cy + Math.round(ch*0.02), Math.round(cw*0.78), Math.round(ch*0.13), 3);
-      const numCanvas  = buildOcrCanvas(bmp, cx + Math.round(cw*0.05), cy + Math.round(ch*0.78), Math.round(cw*0.90), Math.round(ch*0.20), 4);
+      // Étend les bornes de 30 % pour absorber les erreurs de détection
+      // (la détection peut trouver l'artwork intérieur plutôt que le bord de la carte)
+      const ex = Math.round(cw * 0.30), ey = Math.round(ch * 0.30);
+      const ex0 = Math.max(0, cx - ex), ey0 = Math.max(0, cy - ey);
+      const ew = Math.min(bmp.width, cx + cw + ex) - ex0;
+      const eh = Math.min(bmp.height, cy + ch + ey) - ey0;
+      // Zones larges : nom dans le tiers supérieur, numéro dans le quart inférieur
+      const nameCanvas = buildOcrCanvas(bmp, ex0 + Math.round(ew*0.03), ey0,                       Math.round(ew*0.88), Math.round(eh*0.20), 3);
+      const numCanvas  = buildOcrCanvas(bmp, ex0,                        ey0 + Math.round(eh*0.72), ew,                  Math.round(eh*0.28), 4);
       // Séquentiel : un seul worker Tesseract, les setParameters ne doivent pas se chevaucher
       const nameText = await ocrCanvas(worker, nameCanvas, "7",  "");
       const numText  = await ocrCanvas(worker, numCanvas,  "11", "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ");
