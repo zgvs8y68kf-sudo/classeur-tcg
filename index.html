@@ -507,7 +507,7 @@ function viewSeries(){
 }
 function setTile(x){
   const own = ownedInSet(x.id), tot = x.official || x.total || 0, pct = tot ? Math.min(100, own/tot*100) : 0;
-  return `<button class="set" data-set="${esc(x.id)}"><div class="logo">${x.logo ? `<img src="${esc(x.logo)}.webp" alt="${esc(x.name)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:this.alt}))">` : `<span>${esc(x.name)}</span>`}</div>
+  return `<button class="set" data-set="${esc(x.id)}"><div class="logo">${x.logo ? `<img src="${esc(x.logo)}.webp" alt="${esc(x.name)}" loading="lazy" onerror="logoFb(this)">` : `<span>${esc(x.name)}</span>`}</div>
     <div class="nm">${esc(x.name)}</div><div class="bar"><i class="${pct>=100?"full":""}" style="width:${pct}%"></i></div>
     <div class="cnt"><span>${own}/${tot}</span><span>${Math.round(pct)}%</span></div></button>`;
 }
@@ -867,6 +867,17 @@ async function imgFb(el) {
     } catch { _enImgCache[key] = null; }
   }
   if (_enImgCache[key]) el.src = _enImgCache[key] + "/low.webp";
+}
+
+function logoFb(el) {
+  const s = el.src || "";
+  if (s.includes("/fr/")) {
+    el.onerror = () => { el.onerror = null; el.replaceWith(Object.assign(document.createElement("span"), {textContent: el.alt})); };
+    el.src = s.replace("/fr/", "/en/");
+  } else {
+    el.onerror = null;
+    el.replaceWith(Object.assign(document.createElement("span"), {textContent: el.alt}));
+  }
 }
 
 /* Scan d'une page classeur entière (plusieurs cartes en une photo) */
