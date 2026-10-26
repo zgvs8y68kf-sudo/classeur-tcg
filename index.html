@@ -689,11 +689,6 @@ async function getOcrWorker() {
     workerBlobURL: false,
     logger: () => {},
   });
-  // Restreindre aux chiffres et "/" — réduit les faux positifs
-  await _ocrWorker.setParameters({
-    tessedit_pageseg_mode: "11",
-    tessedit_char_whitelist: "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-  });
   return _ocrWorker;
 }
 
@@ -777,8 +772,8 @@ function buildOcrCanvas(bmp, rx, ry, rw, rh, scale = 3) {
   return cv;
 }
 
-async function ocrCanvas(worker, canvas, psm) {
-  await worker.setParameters({ tessedit_pageseg_mode: psm });
+async function ocrCanvas(worker, canvas, psm, whitelist = "") {
+  await worker.setParameters({ tessedit_pageseg_mode: psm, tessedit_char_whitelist: whitelist });
   const { data: { text } } = await worker.recognize(canvas);
   return text.trim();
 }
@@ -803,6 +798,7 @@ function parseOcrNumber(txt) {
 function parseOcrName(txt) {
   return txt
     .split("\n")[0]
+    .replace(/\s*HP\s*\d+/i, "")          // enlève "HP 70", "hp70"…
     .replace(/[^\p{L}\p{N}\s\-'\.]/gu, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -821,10 +817,9 @@ async function scanFiles(files) {
       const { x: cx, y: cy, w: cw, h: ch } = card;
       const nameCanvas = buildOcrCanvas(bmp, cx + Math.round(cw*0.06), cy + Math.round(ch*0.02), Math.round(cw*0.78), Math.round(ch*0.13), 3);
       const numCanvas  = buildOcrCanvas(bmp, cx + Math.round(cw*0.05), cy + Math.round(ch*0.78), Math.round(cw*0.90), Math.round(ch*0.20), 4);
-      const [nameText, numText] = await Promise.all([
-        ocrCanvas(worker, nameCanvas, "7"),
-        ocrCanvas(worker, numCanvas,  "11"),
-      ]);
+      // Séquentiel : un seul worker Tesseract, les setParameters ne doivent pas se chevaucher
+      const nameText = await ocrCanvas(worker, nameCanvas, "7",  "");
+      const numText  = await ocrCanvas(worker, numCanvas,  "11", "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ");
       const name = parseOcrName(nameText);
       const { number, total, setCode } = parseOcrNumber(numText);
 
