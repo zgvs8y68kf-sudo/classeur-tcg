@@ -507,7 +507,7 @@ function viewSeries(){
 }
 function setTile(x){
   const own = ownedInSet(x.id), tot = x.official || x.total || 0, pct = tot ? Math.min(100, own/tot*100) : 0;
-  const _lsrc = x.logo||x.symbol ? `${esc(x.logo||x.symbol)}.webp` : `/_`;
+  const _lsrc = x.logo ? `${esc(x.logo)}.webp` : `/_`;
   return `<button class="set" data-set="${esc(x.id)}"><div class="logo"><img src="${_lsrc}" alt="${esc(x.name)}" loading="lazy" data-symbol="${esc(x.symbol||"")}" data-setid="${esc(x.id)}" onerror="logoFb(this)"></div>
     <div class="nm">${esc(x.name)}</div><div class="bar"><i class="${pct>=100?"full":""}" style="width:${pct}%"></i></div>
     <div class="cnt"><span>${own}/${tot}</span><span>${Math.round(pct)}%</span></div></button>`;
@@ -884,26 +884,26 @@ async function logoFb(el) {
     el.src = s.replace("/fr/", "/en/");
     return;
   }
-  // 2. → symbole de l'extension
+  // 2. pokemontcg.io en priorité (couvre la plupart des sets avec un vrai logo)
+  const sid = el.dataset.setid;
+  if (sid && !el._ptcg) {
+    el._ptcg = true;
+    el.onerror = () => logoFb(el);
+    el.src = `https://images.pokemontcg.io/${sid}/logo.png`;
+    return;
+  }
+  // 3. → symbole de l'extension
   if (!el._sym && el.dataset.symbol) {
     el._sym = true;
     el.onerror = () => logoFb(el);
     el.src = el.dataset.symbol + ".webp";
     return;
   }
-  // 3. symbole FR → symbole EN
+  // 4. symbole FR → symbole EN
   if (el._sym && !el._symEn && s.includes("/fr/")) {
     el._symEn = true;
     el.onerror = () => logoFb(el);
     el.src = s.replace("/fr/", "/en/");
-    return;
-  }
-  // 4. pokemontcg.io (IDs souvent identiques à TCGdex : sv1, swsh1, base1…)
-  const sid = el.dataset.setid;
-  if (sid && !el._ptcg) {
-    el._ptcg = true;
-    el.onerror = () => logoFb(el);
-    el.src = `https://images.pokemontcg.io/${sid}/logo.png`;
     return;
   }
   // 5. première carte du set comme vignette (toujours disponible)
