@@ -205,7 +205,6 @@ nav.tabs .scan .orb svg{width:26px;height:26px}
 </nav>
 <input type="file" id="photo" accept="image/*" capture="environment" multiple hidden>
 <input type="file" id="photo-gallery" accept="image/*" multiple hidden>
-<input type="file" id="photo-page" accept="image/*" hidden>
 
 <script>
 "use strict";
@@ -430,7 +429,7 @@ function render(){
   if (S.tab === "home") app.innerHTML = viewHome();
   else if (S.tab === "series") app.innerHTML = viewSeries();
   else if (S.tab === "set") viewSet(app);
-  else if (S.tab === "scan") { app.innerHTML = viewScan(); setTimeout(claudeCheck, 80); }
+  else if (S.tab === "scan") { app.innerHTML = viewScan(); }
   else if (S.tab === "search") { if (!$("#q")) app.innerHTML = viewSearch(); }
   else if (S.tab === "lists") app.innerHTML = viewLists();
 }
@@ -553,11 +552,9 @@ function viewScan(){
   <div class="drop">
     <div class="ico"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3.2"/></svg></div>
     <b style="font-size:16px">Scanner une carte Pokémon</b>
-    <div id="api-badge" style="font-size:11px;padding:3px 10px;border-radius:12px;background:#f0f0f0;color:#666;display:inline-block;margin:4px 0 0">⏳ Vérification API…</div>
-    <span class="muted" style="font-size:13px;max-width:36em">Pointe la caméra vers le bas de la carte (numéro + code extension). L'identification est automatique et locale — aucun service payant.</span>
+    <span class="muted" style="font-size:13px;max-width:36em">OCR local — aucun service payant. Pointe la caméra vers le bas de la carte (numéro + code extension) et le nom en haut.</span>
     <button class="btn primary" data-act="startvideo" style="font-size:16px;padding:14px 28px">▶ Démarrer le scanner</button>
     <button class="btn" data-act="gallery" style="font-size:13px;margin-top:4px">🖼 Depuis la galerie</button>
-    <button class="btn" data-act="scanpage" style="font-size:13px;margin-top:4px">📄 Scanner une page (multi-cartes)</button>
   </div>
   <div style="margin-top:14px">${rows}</div>
   ${S.scan.length ? `<button class="btn" data-act="clearscan">Vider les résultats</button>` : `<p class="muted" style="font-size:13px;margin-top:14px">Astuce : tiens la carte sous une bonne lumière, fond neutre, sans reflet sur le numéro en bas à droite.</p>`}`;
@@ -758,150 +755,36 @@ function parseOcrName(txt) {
     .slice(0, 50);
 }
 
-/* ---- Claude Vision scan (api/scan.js côté serveur) ---- */
-let _claudeReady = null;
-let _claudeCheckedAt = 0;
-async function claudeCheck() {
-  if (_claudeReady && Date.now() - _claudeCheckedAt < 120_000) return _claudeReady;
-  const badge = document.getElementById("api-badge");
-  if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#f0f0f0;color:#666;display:inline-block;margin:4px 0 0"; badge.textContent = "⏳ Vérification API…"; }
-  let r, body;
-  try {
-    r = await fetch("/api/scan");
-    body = await r.json();
-    _claudeReady = body.ready === true;
-  } catch(e) {
-    _claudeReady = false;
-    const msg = "❌ Erreur réseau — " + e.message;
-    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#fdd;color:#900;display:inline-block;margin:4px 0 0"; badge.textContent = msg; }
-    _claudeCheckedAt = Date.now();
-    return _claudeReady;
-  }
-  const info = `len=${body.len ?? "?"} · prefix=${body.prefix ?? "?"} · ${body.node ?? ""}`;
-  if (_claudeReady) {
-    const providerLabel = body.provider === "openrouter" ? "OpenRouter (gratuit)" : body.provider === "anthropic" ? "Anthropic" : "IA";
-    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#d4f4dd;color:#155724;display:inline-block;margin:4px 0 0"; badge.textContent = `✅ Vision IA · ${providerLabel}`; }
-  } else {
-    const errDetail = body.msg ? body.msg : info;
-    if (badge) { badge.style.cssText = "font-size:11px;padding:3px 10px;border-radius:12px;background:#fdd;color:#900;display:inline-block;margin:4px 0 0"; badge.textContent = "❌ " + errDetail; }
-    toast("API: " + errDetail);
-  }
-  _claudeCheckedAt = Date.now();
-  return _claudeReady;
-}
-
-async function claudeScanImage(source) {
-  if (!await claudeCheck()) return null;
-  const MAX = 1400;
-  const cv = document.createElement("canvas");
-  if (source instanceof HTMLCanvasElement) {
-    const s = Math.min(1, MAX / Math.max(source.width, source.height));
-    cv.width = Math.round(source.width * s); cv.height = Math.round(source.height * s);
-    cv.getContext("2d").drawImage(source, 0, 0, cv.width, cv.height);
-  } else {
-    const bmp = await createImageBitmap(source);
-    const s = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
-    cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
-    cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
-  }
-  const b64 = cv.toDataURL("image/jpeg", 0.88).split(",")[1];
-  try {
-    const r = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: "image/jpeg" }) });
-    const d = await r.json();
-    if (!r.ok) { toast(`Erreur Claude ${r.status}: ${d.error || "?"} — ${(d.message || "").slice(0, 80)}`); return null; }
-    return d.error ? null : d;
-  } catch(e) { toast("Erreur réseau scan: " + e.message); return null; }
-}
-
-async function claudeScanMulti(file) {
-  if (!await claudeCheck()) return null;
-  const MAX = 2000;
-  const bmp = await createImageBitmap(file);
-  const s = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
-  const cv = document.createElement("canvas");
-  cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
-  cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
-  const b64 = cv.toDataURL("image/jpeg", 0.88).split(",")[1];
-  try {
-    const r = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64, mediaType: "image/jpeg", multi: true }) });
-    const d = await r.json();
-    if (!r.ok) { toast(`Erreur scan page ${r.status}: ${d.error || "?"}`); return null; }
-    return d.cards || null;
-  } catch(e) { toast("Erreur réseau scan page: " + e.message); return null; }
-}
-
 async function scanFiles(files) {
-  const useCloud = await claudeCheck();
-  toast(useCloud ? "🤖 Claude prêt" : "⚠ Claude indisponible — OCR de secours");
-  let worker = null;
-  if (!useCloud) {
-    try { worker = await getOcrWorker(); } catch(e) { toast("Tesseract.js non chargé — réessaie dans un instant."); return; }
-  }
+  let worker;
+  try { worker = await getOcrWorker(); } catch(e) { toast("Tesseract.js non chargé — réessaie dans un instant."); return; }
 
   for (const file of files) {
     const entry = { status: "busy", found: [] }; S.scan.unshift(entry); render();
     try {
-      let name = "", number = "", total = "", setCode = "";
-
-      let r = null;
-      if (useCloud) {
-        // Claude Vision : envoie la photo complète
-        r = await claudeScanImage(file);
-        if (r) {
-          number = r.number || ""; total = r.total || ""; setCode = r.setCode || ""; name = r.name || "";
-          const info = [name, number && (number + (total ? "/"+total : "")), setCode].filter(Boolean).join(" · ");
-          if (info) toast("Claude : " + info); else toast("Claude : rien détecté — mauvaise photo ?");
-        } else { toast("Claude indisponible ou erreur réseau"); }
-      } else { // Tesseract
-        // Tesseract : crop nom (haut) + numéro (bas)
-        const bmp = await createImageBitmap(file);
-        const W = bmp.width, H = bmp.height;
-        const nameCanvas = buildOcrCanvas(bmp, Math.round(W*0.06), Math.round(H*0.02), Math.round(W*0.78), Math.round(H*0.13), 3);
-        const numCanvas  = buildOcrCanvas(bmp, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
-        const [nameText, numText] = await Promise.all([
-          ocrCanvas(worker, nameCanvas, "7"),
-          ocrCanvas(worker, numCanvas,  "11"),
-        ]);
-        name = parseOcrName(nameText);
-        const p = parseOcrNumber(numText); number = p.number; total = p.total; setCode = p.setCode;
-      }
+      const bmp = await createImageBitmap(file);
+      const W = bmp.width, H = bmp.height;
+      const nameCanvas = buildOcrCanvas(bmp, Math.round(W*0.06), Math.round(H*0.02), Math.round(W*0.78), Math.round(H*0.13), 3);
+      const numCanvas  = buildOcrCanvas(bmp, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
+      const [nameText, numText] = await Promise.all([
+        ocrCanvas(worker, nameCanvas, "7"),
+        ocrCanvas(worker, numCanvas,  "11"),
+      ]);
+      const name = parseOcrName(nameText);
+      const { number, total, setCode } = parseOcrNumber(numText);
 
       let cands = number ? await lookupCard(number, total, setCode) : [];
-      // det inclut hp/language/regulation pour affiner le scoring de matchCard
-      const det = { name, number, total, setCode, language: r?.language || S.lang, variant: "normal", hp: r?.hp || null, regulation: r?.regulation || null };
+      const det = { name, number, total, setCode, language: S.lang, variant: "normal" };
       if (!cands.length) cands = await matchCard(det);
       entry.found = [{ det, cands, sel: 0, added: false }];
       entry.status = "done";
-      entry.debug = (useCloud ? "Claude" : "OCR") + (name||number ? ` → ${[name, number && (number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ")}` : " → rien détecté");
+      entry.debug = "OCR" + (name||number ? ` → ${[name, number && (number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ")}` : " → rien détecté");
     } catch(e) {
       entry.status = "error";
       entry.msg = "analyse impossible (" + (e?.message || "erreur") + ").";
     }
     render();
   }
-}
-
-async function scanPageFiles(file) {
-  if (!await claudeCheck()) { toast("Claude indisponible — le scan de page nécessite Claude Vision."); return; }
-  const entry = { status: "busy", found: [] }; S.scan.unshift(entry); render();
-  try {
-    const cards = await claudeScanMulti(file);
-    if (!cards || !cards.length) { entry.status = "error"; entry.msg = "aucune carte détectée sur cette page."; render(); return; }
-    toast(`Claude : ${cards.length} carte(s) détectée(s)`);
-    const found = await Promise.all(cards.map(async r => {
-      const det = { name: r.name || "", number: r.number || "", total: r.total || "", setCode: r.setCode || "", language: r.language || S.lang, variant: "normal", hp: r.hp || null, regulation: r.regulation || null };
-      let cands = det.number ? await lookupCard(det.number, det.total, det.setCode) : [];
-      if (!cands.length) cands = await matchCard(det);
-      return { det, cands, sel: 0, added: false };
-    }));
-    entry.found = found;
-    entry.status = "done";
-    entry.debug = `Claude page → ${cards.length} carte(s)`;
-  } catch(e) {
-    entry.status = "error";
-    entry.msg = "analyse impossible (" + (e?.message || "erreur") + ").";
-  }
-  render();
 }
 
 const normNum = n => String(n ?? "").trim().toUpperCase().replace(/^0+(?=\d)/, "");
@@ -1078,7 +961,6 @@ async function startVideoScan(){
   } else {
     if (window.Tesseract) { vscanBadge("Chargement OCR…"); getOcrWorker().then(() => vscanBadge("Loupe active — tape ou 📷")).catch(() => vscanBadge("Tape le numéro dans le champ")); }
     else vscanBadge("Tape le numéro vu dans la loupe");
-    claudeCheck();
   }
   VS.timer = setInterval(async () => { const v = document.getElementById("vscan-vid"); if (v) await analyzeFrame(v); }, 1200);
   setTimeout(() => inp.focus(), 400);
@@ -1163,15 +1045,6 @@ async function vscanCapturePhoto(){
       const p = parseOcrNumber(text.trim()); number = p.number; total = p.total; setCode = p.setCode;
     } catch(e){}
   }
-  // 3. Claude Vision (dernier recours si OCR échoue)
-  if (!normNum(number) && _claudeReady) {
-    vscanBadge("Claude analyse…");
-    try {
-      const r = await claudeScanImage(frame);
-      if (r && normNum(r.number)) { number = r.number; total = r.total || ""; setCode = r.setCode || ""; }
-    } catch(e){}
-  }
-
   const inp = document.getElementById("vscan-q");
   if (normNum(number)) {
     const query = `${normNum(number)}${total?"/"+total:""}`;
@@ -1280,7 +1153,6 @@ document.addEventListener("click", e => {
   if (act === "startvideo") return startVideoScan();
   if (act === "photo") return $("#photo").click();
   if (act === "gallery") return $("#photo-gallery").click();
-  if (act === "scanpage") return $("#photo-page").click();
   if (act === "clearscan") { S.scan = []; return render(); }
   if (act === "refresh") return refreshPrices(b);
   if (act === "export") return exportCsv();
@@ -1291,7 +1163,6 @@ document.addEventListener("click", e => {
 document.addEventListener("input", e => { if (e.target.id === "q") { clearTimeout(searchTimer); const v = e.target.value.trim(); searchTimer = setTimeout(() => doSearch(v), 350); } });
 $("#photo").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) scanFiles(files); });
 $("#photo-gallery").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) scanFiles(files); });
-$("#photo-page").addEventListener("change", e => { const file = e.target.files[0]; e.target.value = ""; if (file) scanPageFiles(file); });
 
 render();
 loadCatalog();
