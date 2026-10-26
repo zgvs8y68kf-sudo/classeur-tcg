@@ -1237,19 +1237,46 @@ async function vscanCapturePhoto(){
   if (!vid || vid.readyState < 2) { vscanBadge("Caméra pas prête"); return; }
   const W = vid.videoWidth, H = vid.videoHeight; if (!W) return;
   vscanBadge("Analyse…");
-  const frame = document.createElement("canvas"); frame.width = W; frame.height = H;
-  frame.getContext("2d").drawImage(vid, 0, 0);
-  const numCv = buildOcrCanvas(frame, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
 
+  // Capture compressée max 1280px (même que scan galerie)
+  const r = Math.min(1, 1280 / Math.max(W, H));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(W * r); cv.height = Math.round(H * r);
+  cv.getContext("2d").drawImage(vid, 0, 0, cv.width, cv.height);
+
+  // 1. Gemini via /api/scan (fiable, iOS + Android)
+  try {
+    const blob = await new Promise(res => cv.toBlob(res, "image/jpeg", 0.90));
+    const b64 = await new Promise(res => { const rd = new FileReader(); rd.onload = e => res(e.target.result.split(",")[1]); rd.readAsDataURL(blob); });
+    const resp = await fetch("/api/scan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageBase64: b64, mimeType: "image/jpeg" })
+    });
+    if (resp.ok) {
+      const g = await resp.json();
+      const inp = document.getElementById("vscan-q");
+      if (g.number) {
+        const query = `${normNum(g.number)}${g.total ? "/" + g.total : ""}`;
+        if (inp) inp.value = query;
+        vscanSearch(query, g.setCode || ""); vscanBadge(query + " ✓"); return;
+      }
+      if (g.name) {
+        if (inp) inp.value = g.name;
+        vscanSearch(g.name, g.setCode || ""); vscanBadge(g.name.slice(0, 20) + " ✓"); return;
+      }
+    }
+  } catch(e) {}
+
+  // 2. Fallback OCR sur la zone numéro (Android Chrome / si Gemini indisponible)
+  const cw = cv.width, ch = cv.height;
+  const numCv = buildOcrCanvas(cv, Math.round(cw*0.05), Math.round(ch*0.78), Math.round(cw*0.90), Math.round(ch*0.20), 4);
   let number = "", total = "", setCode = "";
-  // 1. TextDetector natif (Android Chrome)
   if (VS.textDet) {
     try {
       const texts = await VS.textDet.detect(numCv);
       for (const t of texts) { const p = parseOcrNumber(t.rawValue); if (normNum(p.number)){ number = p.number; total = p.total; setCode = p.setCode; break; } }
     } catch(e){}
   }
-  // 2. Tesseract OCR (rapide, gratuit, local)
   if (!normNum(number) && _ocrWorker) {
     try {
       await _ocrWorker.setParameters({tessedit_pageseg_mode:11});
@@ -1260,9 +1287,9 @@ async function vscanCapturePhoto(){
   const inp = document.getElementById("vscan-q");
   if (normNum(number)) {
     const query = `${normNum(number)}${total?"/"+total:""}`;
-    if (inp) inp.value = query; vscanSearch(query, setCode); vscanBadge(`${query} ✓`);
+    if (inp) inp.value = query; vscanSearch(query, setCode); vscanBadge(query + " ✓");
   } else {
-    vscanBadge("Non reconnu — tape le numéro vu dans la loupe"); if (inp) inp.focus();
+    vscanBadge("Non reconnu — tape le numéro"); if (inp) inp.focus();
   }
 }
 
