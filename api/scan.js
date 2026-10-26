@@ -35,7 +35,7 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
     });
 
     const models = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3-flash"];
-    let gemRes, lastErr = "";
+    let gemRes = null, lastErr = "";
     for (const model of models) {
       const ctrl = new AbortController();
       setTimeout(() => ctrl.abort(), 5500);
@@ -47,11 +47,11 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
         if (gemRes.ok) break;
         lastErr = await gemRes.text();
         if (gemRes.status !== 503) break;
-      } catch { break; }
+      } catch(e) { lastErr = e.message; break; }
     }
 
-    if (!gemRes.ok) {
-      res.status(502).json({ error: "gemini_error", status: gemRes.status, detail: lastErr.slice(0, 400) });
+    if (!gemRes?.ok) {
+      res.status(502).json({ error: "gemini_error", status: gemRes?.status, detail: lastErr.slice(0, 400) });
       return;
     }
 
