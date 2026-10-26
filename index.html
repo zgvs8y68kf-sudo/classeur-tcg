@@ -816,38 +816,76 @@ function parseOcrName(txt) {
     .slice(0, 50);
 }
 
-async function scanFiles(files) {
-  let worker;
-  try { worker = await getOcrWorker(); } catch(e) { toast("Tesseract.js non chargé — réessaie dans un instant."); return; }
+/* Compresse l'image pour Gemini (max 1024 px, JPEG 85 %) */
+async function compressForGemini(file) {
+  const bmp = await createImageBitmap(file);
+  const MAX = 1024;
+  const r = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(bmp.width * r); cv.height = Math.round(bmp.height * r);
+  cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+  return new Promise(res => cv.toBlob(blob => {
+    const rd = new FileReader();
+    rd.onload = e => res({ b64: e.target.result.split(",")[1], mime: "image/jpeg" });
+    rd.readAsDataURL(blob);
+  }, "image/jpeg", 0.85));
+}
 
+async function scanFiles(files) {
   for (const file of files) {
     const entry = { status: "busy", found: [] }; S.scan.unshift(entry); render();
     try {
-      const bmp = await createImageBitmap(file);
-      const card = detectCard(bmp);
-      const { x: cx, y: cy, w: cw, h: ch } = card;
-      // Petite marge de sécurité (8 %) autour de la région détectée
-      const ex = Math.round(cw * 0.08), ey = Math.round(ch * 0.08);
-      const ex0 = Math.max(0, cx - ex), ey0 = Math.max(0, cy - ey);
-      const ew = Math.min(bmp.width, cx + cw + ex) - ex0;
-      const eh = Math.min(bmp.height, cy + ch + ey) - ey0;
-      // Zones : nom en haut (2–15 %), numéro en bas (78–98 %)
-      const nameCanvas = buildOcrCanvas(bmp, ex0 + Math.round(ew*0.05), ey0 + Math.round(eh*0.02), Math.round(ew*0.82), Math.round(eh*0.13), 3);
-      const numCanvas  = buildOcrCanvas(bmp, ex0 + Math.round(ew*0.03), ey0 + Math.round(eh*0.78), Math.round(ew*0.94), Math.round(eh*0.20), 4);
-      // Séquentiel : un seul worker Tesseract, les setParameters ne doivent pas se chevaucher
-      const nameText = await ocrCanvas(worker, nameCanvas, "7",  "");
-      const numText  = await ocrCanvas(worker, numCanvas,  "11", "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-      const name = parseOcrName(nameText);
-      const { number, total, setCode } = parseOcrNumber(numText);
+      let name = "", number = "", total = "", setCode = "";
+      let via = "Tesseract";
+
+      // 1. Essaie Gemini via /api/scan
+      try {
+        const { b64, mime } = await compressForGemini(file);
+        const resp = await fetch("/api/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: b64, mimeType: mime })
+        });
+        if (resp.ok) {
+          const g = await resp.json();
+          if (!g.error && (g.name || g.number)) {
+            name = g.name || ""; number = g.number || "";
+            total = g.total || ""; setCode = g.setCode || "";
+            via = "Gemini";
+          }
+        }
+      } catch {}
+
+      // 2. Fallback Tesseract si Gemini indisponible ou silencieux
+      if (via === "Tesseract") {
+        let worker;
+        try { worker = await getOcrWorker(); }
+        catch { toast("OCR non chargé — réessaie dans un instant."); entry.status = "error"; entry.msg = "OCR non chargé."; render(); continue; }
+
+        const bmp = await createImageBitmap(file);
+        const card = detectCard(bmp);
+        const { x: cx, y: cy, w: cw, h: ch } = card;
+        const ex = Math.round(cw * 0.08), ey = Math.round(ch * 0.08);
+        const ex0 = Math.max(0, cx - ex), ey0 = Math.max(0, cy - ey);
+        const ew = Math.min(bmp.width, cx + cw + ex) - ex0;
+        const eh = Math.min(bmp.height, cy + ch + ey) - ey0;
+        const nameCanvas = buildOcrCanvas(bmp, ex0 + Math.round(ew*0.05), ey0 + Math.round(eh*0.02), Math.round(ew*0.82), Math.round(eh*0.13), 3);
+        const numCanvas  = buildOcrCanvas(bmp, ex0 + Math.round(ew*0.03), ey0 + Math.round(eh*0.78), Math.round(ew*0.94), Math.round(eh*0.20), 4);
+        const nameText = await ocrCanvas(worker, nameCanvas, "7", "");
+        const numText  = await ocrCanvas(worker, numCanvas, "11", "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        name = parseOcrName(nameText);
+        ({ number, total, setCode } = parseOcrNumber(numText));
+        const rawStr = `nom:"${nameText.replace(/\n/g,"↵").slice(0,20)}" n°:"${numText.replace(/\n/g,"↵").slice(0,25)}"`;
+        entry.debug = `${card._detected ? "Carte détectée" : "Image entière"} | Tesseract brut: ${rawStr}`;
+      } else {
+        entry.debug = `Gemini → ${[name, number&&(number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ")}`;
+      }
 
       let cands = number ? await lookupCard(number, total, setCode) : [];
       const det = { name, number, total, setCode, language: S.lang, variant: "normal" };
       if (!cands.length) cands = await matchCard(det);
       entry.found = [{ det, cands, sel: 0, added: false }];
       entry.status = "done";
-      const parsedStr = [name, number && (number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ");
-      const rawStr = `nom:"${nameText.replace(/\n/g,"↵").slice(0,25)}" n°:"${numText.replace(/\n/g,"↵").slice(0,30)}"`;
-      entry.debug = (card._detected ? "Carte détectée" : "Image entière") + " | OCR" + (parsedStr ? ` → ${parsedStr}` : " → rien") + ` | brut: ${rawStr}`;
     } catch(e) {
       entry.status = "error";
       entry.msg = "analyse impossible (" + (e?.message || "erreur") + ").";
