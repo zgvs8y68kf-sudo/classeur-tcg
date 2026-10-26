@@ -1,24 +1,31 @@
 // Vercel serverless function — proxie vers Gemini pour lire une carte Pokémon.
 // Variable d'environnement requise : GEMINI_API_KEY (Google AI Studio)
 module.exports = async function handler(req, res) {
-  if (req.method !== "POST") { res.status(405).end(); return; }
+  try {
+    if (req.method !== "POST") { res.status(405).end(); return; }
 
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) { res.status(503).json({ error: "no_key" }); return; }
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) { res.status(503).json({ error: "no_key" }); return; }
 
-  const { imageBase64, mimeType = "image/jpeg" } = req.body || {};
-  if (!imageBase64) { res.status(400).json({ error: "no_image" }); return; }
+    let imageBase64, mimeType = "image/jpeg";
+    try {
+      const body = req.body || {};
+      imageBase64 = body.imageBase64;
+      mimeType = body.mimeType || "image/jpeg";
+    } catch (e) {
+      res.status(400).json({ error: "body_parse_error", detail: e.message }); return;
+    }
+    if (!imageBase64) { res.status(400).json({ error: "no_image" }); return; }
 
-  const prompt = `Tu regardes la photo d'une carte Pokémon.
+    const prompt = `Tu regardes la photo d'une carte Pokémon.
 Extrais ces informations :
 - name   : le nom du Pokémon en haut de la carte (grand texte), sans stage, sans HP
 - number : le numéro collecteur avant le slash, ex "036" ; "" si non visible
 - total  : le total du set après le slash, ex "128" ; "" si absent
-- setCode: le code d'extension ou de régulation visible près du numéro, ex "SVI" ou "30CFR" ; "" si absent
+- setCode: le code d'extension ou de régulation visible près du numéro, ex "SVI" ; "" si absent
 
 Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
 
-  try {
     const gemRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
       {
@@ -36,7 +43,7 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
 
     if (!gemRes.ok) {
       const err = await gemRes.text();
-      res.status(502).json({ error: "gemini_error", detail: err.slice(0, 300) });
+      res.status(502).json({ error: "gemini_error", detail: err.slice(0, 400) });
       return;
     }
 
@@ -44,7 +51,7 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
     let result;
     try { result = JSON.parse(text); }
-    catch { result = { name: "", number: "", total: "", setCode: "" }; }
+    catch (e) { result = {}; }
 
     res.json({
       name:    String(result.name    || "").trim().slice(0, 60),
@@ -53,6 +60,6 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
       setCode: String(result.setCode || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8)
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message || String(e), stack: String(e.stack || "").slice(0, 300) });
   }
 };
