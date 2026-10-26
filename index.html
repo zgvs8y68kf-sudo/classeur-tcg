@@ -839,6 +839,7 @@ async function scanFiles(files) {
       let via = "Tesseract";
 
       // 1. Essaie Gemini via /api/scan
+      let geminiDebug = "";
       try {
         const { b64, mime } = await compressForGemini(file);
         const resp = await fetch("/api/scan", {
@@ -846,15 +847,17 @@ async function scanFiles(files) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageBase64: b64, mimeType: mime })
         });
-        if (resp.ok) {
-          const g = await resp.json();
-          if (!g.error && (g.name || g.number)) {
-            name = g.name || ""; number = g.number || "";
-            total = g.total || ""; setCode = g.setCode || "";
-            via = "Gemini";
-          }
+        const g = await resp.json();
+        if (!resp.ok || g.error) {
+          geminiDebug = `Gemini erreur ${resp.status}: ${g.error||""} ${g.detail||""}`.trim();
+        } else if (g.name || g.number) {
+          name = g.name || ""; number = g.number || "";
+          total = g.total || ""; setCode = g.setCode || "";
+          via = "Gemini";
+        } else {
+          geminiDebug = "Gemini: aucun résultat";
         }
-      } catch {}
+      } catch(e) { geminiDebug = "Gemini fetch échoué: " + e.message; }
 
       // 2. Fallback Tesseract si Gemini indisponible ou silencieux
       if (via === "Tesseract") {
@@ -876,7 +879,7 @@ async function scanFiles(files) {
         name = parseOcrName(nameText);
         ({ number, total, setCode } = parseOcrNumber(numText));
         const rawStr = `nom:"${nameText.replace(/\n/g,"↵").slice(0,20)}" n°:"${numText.replace(/\n/g,"↵").slice(0,25)}"`;
-        entry.debug = `${card._detected ? "Carte détectée" : "Image entière"} | Tesseract brut: ${rawStr}`;
+        entry.debug = `${geminiDebug ? geminiDebug + " → " : ""}${card._detected ? "Carte détectée" : "Image entière"} | Tesseract: ${rawStr}`;
       } else {
         entry.debug = `Gemini → ${[name, number&&(number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ")}`;
       }
