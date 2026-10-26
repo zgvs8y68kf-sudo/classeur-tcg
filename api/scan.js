@@ -1,6 +1,6 @@
 // Vercel serverless function — proxie vers Gemini pour lire une carte Pokémon.
 // Variable d'environnement requise : GEMINI_API_KEY (Google AI Studio)
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   try {
     if (req.method !== "POST") { res.status(405).end(); return; }
 
@@ -62,4 +62,4 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
   } catch (e) {
     res.status(500).json({ error: e.message || String(e), stack: String(e.stack || "").slice(0, 300) });
   }
-};
+}
