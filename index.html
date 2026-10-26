@@ -527,7 +527,7 @@ async function viewSet(app){
   ${cards.length ? `<div class="binder">${cards.map(c => {
     const d = S.coll[c.id], q = d ? qty(d) : 0;
     return `<button class="pocket ${q?"":"missing"}" data-open="${esc(c.id)}" aria-label="${esc(c.name)} n°${esc(c.localId)}${q?", "+q+" exemplaire(s)":", manquante"}">
-      ${c.image ? `<img src="${esc(c.image)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">` : `<span class="noimg">${esc(c.name)}<br>pas d'image</span>`}
+      <img src="${esc(c.image ? c.image+"/low.webp" : "/_")}" data-set="${esc(c.setId)}" data-local="${esc(c.localId)}" alt="" loading="lazy" onerror="imgFb(this)">
       <span class="no">${esc(c.localId)}</span>${q > 1 ? `<span class="qty">×${q}</span>` : ""}${d?.wish && !q ? `<span class="wish">♥</span>` : ""}${d?.grade?.co ? `<span class="grd">${esc(d.grade.co)} ${esc(d.grade.note||"")}</span>` : ""}
     </button>`; }).join("")}</div>` : `<div class="empty">Aucune carte pour ce filtre.</div>`}`;
 }
@@ -540,7 +540,7 @@ function viewScan(){
     return dbg + s.found.map((f, k) => `<div class="det">
       <div class="row" style="justify-content:space-between"><b>${esc(f.det.name || "Carte")} <span class="muted num">${esc(f.det.number||"?")}${f.det.total?"/"+esc(f.det.total):""}</span></b>
       ${f.added ? `<span class="up" style="font-weight:700">Ajoutée ✓</span>` : ""}</div>
-      ${f.cands.length ? `<div class="cand">${f.cands.slice(0,12).map((c,ci) => `<button data-pick="${i}:${k}:${ci}" aria-pressed="${f.sel===ci}"><img src="${esc(c.image ? c.image+"/low.webp" : "")}" alt="" loading="lazy" onerror="imgFb(this)"><small>${esc(S.catalog?.sets?.[c.setId]?.name || c.setId)}</small></button>`).join("")}</div>
+      ${f.cands.length ? `<div class="cand">${f.cands.slice(0,12).map((c,ci) => `<button data-pick="${i}:${k}:${ci}" aria-pressed="${f.sel===ci}"><img src="${esc(c.image ? c.image+"/low.webp" : "/_")}" data-set="${esc(c.setId)}" data-local="${esc(c.localId)}" alt="" loading="lazy" onerror="imgFb(this)"><small>${esc(S.catalog?.sets?.[c.setId]?.name || c.setId)}</small></button>`).join("")}</div>
       <div class="row"><select id="var-${i}-${k}" class="chip" aria-label="Variante">${VARIANTS.map(([v,l]) => `<option value="${v}" ${f.det.variant===v?"selected":""}>${l}</option>`).join("")}</select>
       <button class="btn primary" data-addscan="${i}:${k}">${f.added ? "Ajouter un exemplaire de plus" : "Ajouter au classeur"}</button></div>`
       : `<p class="muted" style="margin:6px 0">Pas trouvée automatiquement${f.det.number ? ` (${esc(f.det.number)}${f.det.total?"/"+esc(f.det.total):""} ${esc(f.det.setCode||"")})` : ""}. <button class="btn" data-act="tosearch" data-q="${esc(f.det.name||f.det.number||"")}">Chercher</button></p>`}
@@ -621,7 +621,7 @@ async function openCard(id){
     const q = qty(doc);
     $(".sheet", scrim).innerHTML = `<div class="grab"></div>
     <div class="detail">
-      <img class="big" src="${esc(c.image ? c.image + "/high.webp" : "")}" alt="${esc(c.name)}" onerror="imgFb(this)">
+      <img class="big" src="${esc(c.image ? c.image + "/high.webp" : "/_")}" data-set="${esc(c.setId||doc.setId)}" data-local="${esc(c.localId||doc.localId)}" alt="${esc(c.name)}" onerror="imgFb(this)">
       <div style="min-width:0">
         <div class="row" style="justify-content:space-between;align-items:flex-start"><h3>${esc(c.name)}</h3>
           <button class="iconbtn" id="wishbtn" aria-pressed="${!!doc.wish}" title="Liste de souhaits" style="color:${doc.wish?"var(--accent)":"inherit"}">${doc.wish?"♥":"♡"}</button></div>
@@ -833,11 +833,28 @@ async function compressForGemini(file) {
   }, "image/jpeg", 0.90));
 }
 
-/* Fallback image FR → EN si TCGdex FR manque l'image */
-function imgFb(el) {
-  const s = el.src;
-  if (s.includes("/fr/")) { el.src = s.replace("/fr/", "/en/"); }
-  else { el.onerror = null; el.closest(".noimg-wrap")?.classList.add("noimg-dead"); }
+/* Fallback image : FR 404 → EN ; pas d'URL → fetch TCGdex EN */
+const _enImgCache = {};
+async function imgFb(el) {
+  el.onerror = null;
+  const s = el.src || "";
+  if (s.includes("/fr/")) {
+    // URL FR existe mais 404 → essaie EN
+    el.onerror = () => { el.onerror = null; };
+    el.src = s.replace("/fr/", "/en/");
+    return;
+  }
+  // Pas d'URL FR du tout (data-set / data-local requis)
+  const sid = el.dataset.set, lid = el.dataset.local;
+  if (!sid || !lid) return;
+  const key = `${sid}-${lid}`;
+  if (!(key in _enImgCache)) {
+    try {
+      const r = await fetch(`https://api.tcgdex.net/v2/en/cards/${key}`);
+      _enImgCache[key] = r.ok ? ((await r.json()).image || null) : null;
+    } catch { _enImgCache[key] = null; }
+  }
+  if (_enImgCache[key]) el.src = _enImgCache[key] + "/low.webp";
 }
 
 async function scanFiles(files) {
