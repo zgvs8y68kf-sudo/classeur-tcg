@@ -34,24 +34,15 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
       generationConfig: { response_mime_type: "application/json", temperature: 0 }
     });
 
-    const attempts = [
-      { api: "v1beta", model: "gemini-3.8-flash" },
-      { api: "v1",     model: "gemini-2.5-flash" },
-    ];
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${key}`;
     let gemRes, lastErr = "";
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
-    try {
-      for (const { api, model } of attempts) {
-        gemRes = await fetch(
-          `https://generativelanguage.googleapis.com/${api}/models/${model}:generateContent?key=${key}`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, signal: ctrl.signal }
-        );
-        if (gemRes.ok) break;
-        lastErr = await gemRes.text();
-        if (gemRes.status !== 503 && gemRes.status !== 404) break;
-      }
-    } finally { clearTimeout(timer); }
+    for (let i = 0; i < 3; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 800));
+      gemRes = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });
+      if (gemRes.ok || gemRes.status !== 503) break;
+      lastErr = await gemRes.text();
+    }
+    if (!gemRes.ok && !lastErr) lastErr = await gemRes.text();
 
     if (!gemRes.ok) {
       res.status(502).json({ error: "gemini_error", detail: lastErr.slice(0, 400) });
