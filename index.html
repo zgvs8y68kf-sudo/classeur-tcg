@@ -697,6 +697,64 @@ async function getOcrWorker() {
   return _ocrWorker;
 }
 
+/* Détecte le rectangle de la carte dans l'image par projection de gradient.
+   Retourne {x,y,w,h} dans les coords originales, ou l'image entière en fallback. */
+function detectCard(bmp) {
+  const MAX = 500;
+  const ratio = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+  const sw = Math.round(bmp.width * ratio), sh = Math.round(bmp.height * ratio);
+  const tmp = document.createElement("canvas");
+  tmp.width = sw; tmp.height = sh;
+  const ctx = tmp.getContext("2d");
+  ctx.drawImage(bmp, 0, 0, sw, sh);
+  const px = ctx.getImageData(0, 0, sw, sh).data;
+
+  // Niveaux de gris
+  const g = new Uint8Array(sw * sh);
+  for (let i = 0; i < g.length; i++)
+    g[i] = (77*px[i*4] + 150*px[i*4+1] + 29*px[i*4+2]) >> 8;
+
+  // Projections du gradient Sobel (énergie par ligne / colonne)
+  const rp = new Float32Array(sh), cp = new Float32Array(sw);
+  for (let y = 1; y < sh-1; y++)
+    for (let x = 1; x < sw-1; x++) {
+      const m = Math.hypot(g[y*sw+x+1] - g[y*sw+x-1], g[(y+1)*sw+x] - g[(y-1)*sw+x]);
+      rp[y] += m; cp[x] += m;
+    }
+
+  // Lissage (boîte ±5px) pour réduire le bruit
+  const smooth = (a, r) => {
+    const b = new Float32Array(a.length);
+    for (let i = 0; i < a.length; i++) {
+      let s = 0, n = 0;
+      for (let j = Math.max(0,i-r); j <= Math.min(a.length-1,i+r); j++,n++) s += a[j];
+      b[i] = s / n;
+    }
+    return b;
+  };
+  const srp = smooth(rp, 5), scp = smooth(cp, 5);
+
+  // Premier / dernier dépassement de seuil (25 % du max) depuis l'extérieur
+  const rt = Math.max(...srp) * 0.25, ct = Math.max(...scp) * 0.25;
+  let top = 2, bot = sh-3, lft = 2, rgt = sw-3;
+  for (let y = 2; y < sh-2; y++) if (srp[y] > rt) { top = y; break; }
+  for (let y = sh-3; y >= 2; y--) if (srp[y] > rt) { bot = y; break; }
+  for (let x = 2; x < sw-2; x++) if (scp[x] > ct) { lft = x; break; }
+  for (let x = sw-3; x >= 2; x--) if (scp[x] > ct) { rgt = x; break; }
+
+  // Sanité : si la zone détectée est trop petite → fallback image entière
+  if ((rgt - lft) < sw * 0.35 || (bot - top) < sh * 0.35)
+    return { x: 0, y: 0, w: bmp.width, h: bmp.height, _detected: false };
+
+  // Retour en coordonnées originales + petite marge
+  const pad = Math.round(6 / ratio);
+  const ox = Math.max(0, Math.round(lft / ratio) - pad);
+  const oy = Math.max(0, Math.round(top / ratio) - pad);
+  const or = Math.min(bmp.width,  Math.round(rgt / ratio) + pad);
+  const ob = Math.min(bmp.height, Math.round(bot / ratio) + pad);
+  return { x: ox, y: oy, w: or - ox, h: ob - oy, _detected: true };
+}
+
 function buildOcrCanvas(bmp, rx, ry, rw, rh, scale = 3) {
   const cv = document.createElement("canvas");
   cv.width = Math.round(rw * scale); cv.height = Math.round(rh * scale);
@@ -753,9 +811,10 @@ async function scanFiles(files) {
     const entry = { status: "busy", found: [] }; S.scan.unshift(entry); render();
     try {
       const bmp = await createImageBitmap(file);
-      const W = bmp.width, H = bmp.height;
-      const nameCanvas = buildOcrCanvas(bmp, Math.round(W*0.06), Math.round(H*0.02), Math.round(W*0.78), Math.round(H*0.13), 3);
-      const numCanvas  = buildOcrCanvas(bmp, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
+      const card = detectCard(bmp);
+      const { x: cx, y: cy, w: cw, h: ch } = card;
+      const nameCanvas = buildOcrCanvas(bmp, cx + Math.round(cw*0.06), cy + Math.round(ch*0.02), Math.round(cw*0.78), Math.round(ch*0.13), 3);
+      const numCanvas  = buildOcrCanvas(bmp, cx + Math.round(cw*0.05), cy + Math.round(ch*0.78), Math.round(cw*0.90), Math.round(ch*0.20), 4);
       const [nameText, numText] = await Promise.all([
         ocrCanvas(worker, nameCanvas, "7"),
         ocrCanvas(worker, numCanvas,  "11"),
@@ -768,7 +827,7 @@ async function scanFiles(files) {
       if (!cands.length) cands = await matchCard(det);
       entry.found = [{ det, cands, sel: 0, added: false }];
       entry.status = "done";
-      entry.debug = "OCR" + (name||number ? ` → ${[name, number && (number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ")}` : " → rien détecté");
+      entry.debug = (card._detected ? "Carte détectée" : "Image entière") + " | OCR" + (name||number ? ` → ${[name, number && (number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ")}` : " → rien détecté");
     } catch(e) {
       entry.status = "error";
       entry.msg = "analyse impossible (" + (e?.message || "erreur") + ").";
