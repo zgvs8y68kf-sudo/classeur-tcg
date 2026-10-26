@@ -34,11 +34,16 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
       generationConfig: { response_mime_type: "application/json", temperature: 0 }
     });
 
-    const models = ["gemini-3.8-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"];
+    const attempts = [
+      { api: "v1beta", model: "gemini-3.8-flash" },
+      { api: "v1",     model: "gemini-3.8-flash" },
+      { api: "v1",     model: "gemini-2.5-flash" },
+      { api: "v1beta", model: "gemini-2.5-flash" },
+    ];
     let gemRes, lastErr = "";
-    for (const model of models) {
+    for (const { api, model } of attempts) {
       gemRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+        `https://generativelanguage.googleapis.com/${api}/models/${model}:generateContent?key=${key}`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: payload }
       );
       if (gemRes.ok) break;
