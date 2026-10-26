@@ -720,9 +720,9 @@ async function ocrCanvas(worker, canvas, psm) {
 }
 
 function parseOcrNumber(txt) {
-  const m = txt.match(/([A-Z]{0,4}\d{1,4})\s*[\/|\\]\s*(\d{1,4})/) ||
-            txt.match(/([A-Z]{2,5}\d{2,4})/) ||
-            txt.match(/(\d{1,4})\s*[\/|\\]\s*(\d{1,4})/);
+  const m = txt.match(/(\d{1,4})\s*[\/|\\]\s*(\d{1,4})/) ||
+            txt.match(/([A-Z]{1,4}\d{1,4})\s*[\/|\\]\s*(\d{1,4})/) ||
+            txt.match(/([A-Z]{2,5}\d{2,4})/);
   if (!m) return { number: "", total: "", setCode: "" };
   const number = m[1].replace(/O/g, "0").replace(/l/g, "1").replace(/I/g, "1");
   const total = (m[2] || "").replace(/O/g, "0");
