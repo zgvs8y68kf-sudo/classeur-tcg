@@ -204,6 +204,8 @@ nav.tabs .scan .orb svg{width:26px;height:26px}
   <button data-tab="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.4-9.3-9A5 5 0 0 1 12 6a5 5 0 0 1 9.3 6c-2.3 4.6-9.3 9-9.3 9z"/></svg>Listes</button>
 </nav>
 <input type="file" id="photo-gallery" accept="image/*" multiple hidden>
+<input type="file" id="photo-page" accept="image/*" hidden>
+<input type="file" id="import-json" accept=".json,application/json" hidden>
 
 <script>
 "use strict";
@@ -534,17 +536,21 @@ async function viewSet(app){
 
 function viewScan(){
   const rows = S.scan.map((s, i) => {
-    if (s.status === "busy") return `<div class="det"><span class="spinner"></span> Analyse de la photo ${i+1}…</div>`;
-    if (s.status === "error") return `<div class="det"><b>Photo ${i+1}</b> — ${esc(s.msg)}</div>`;
+    if (s.status === "busy") return `<div class="det"><span class="spinner"></span> ${esc(s.debug || (s._isPage ? "Analyse de la page…" : s._isImport ? "Import…" : `Analyse de la photo ${i+1}…`))}</div>`;
+    if (s.status === "error") return `<div class="det"><b>${s._isPage ? "Page" : s._isImport ? "Import" : `Photo ${i+1}`}</b> — ${esc(s.msg)}</div>`;
     const dbg = s.debug ? `<p class="muted" style="font-size:11px;margin:0 0 6px">${esc(s.debug)}</p>` : "";
-    return dbg + s.found.map((f, k) => `<div class="det">
+    const unadded = s.found.filter(f => f.cands.length && !f.added).length;
+    const addAllBtn = s._isPage && unadded > 1
+      ? `<button class="btn primary" style="width:100%;margin-top:8px" data-addall="${i}">✅ Tout ajouter (${unadded} cartes)</button>` : "";
+    const cards = s.found.map((f, k) => `<div class="det">
       <div class="row" style="justify-content:space-between"><b>${esc(f.det.name || "Carte")} <span class="muted num">${esc(f.det.number||"?")}${f.det.total?"/"+esc(f.det.total):""}</span></b>
       ${f.added ? `<span class="up" style="font-weight:700">Ajoutée ✓</span>` : ""}</div>
       ${f.cands.length ? `<div class="cand">${f.cands.slice(0,12).map((c,ci) => `<button data-pick="${i}:${k}:${ci}" aria-pressed="${f.sel===ci}"><img src="${esc(c.image ? c.image+"/low.webp" : "/_")}" data-set="${esc(c.setId)}" data-local="${esc(c.localId)}" alt="" loading="lazy" onerror="imgFb(this)"><small>${esc(S.catalog?.sets?.[c.setId]?.name || c.setId)}</small></button>`).join("")}</div>
       <div class="row"><select id="var-${i}-${k}" class="chip" aria-label="Variante">${VARIANTS.map(([v,l]) => `<option value="${v}" ${f.det.variant===v?"selected":""}>${l}</option>`).join("")}</select>
       <button class="btn primary" data-addscan="${i}:${k}">${f.added ? "Ajouter un exemplaire de plus" : "Ajouter au classeur"}</button></div>`
       : `<p class="muted" style="margin:6px 0">Pas trouvée automatiquement${f.det.number ? ` (${esc(f.det.number)}${f.det.total?"/"+esc(f.det.total):""} ${esc(f.det.setCode||"")})` : ""}. <button class="btn" data-act="tosearch" data-q="${esc(f.det.name||f.det.number||"")}">Chercher</button></p>`}
-    </div>`).join("") || `<div class="det">Photo ${i+1} : aucune carte détectée.</div>`;
+    </div>`).join("");
+    return dbg + (cards || `<div class="det">${s._isImport ? "Aucune carte importée." : `Photo ${i+1} : aucune carte détectée.`}</div>`) + addAllBtn;
   }).join("");
   return `
   <div class="drop">
@@ -553,6 +559,8 @@ function viewScan(){
     <span class="muted" style="font-size:13px;max-width:36em">Reconnaissance par IA (Gemini) — bonne lumière, carte bien cadrée.</span>
     <button class="btn primary" data-act="startvideo" style="font-size:16px;padding:14px 28px">▶ Démarrer le scanner</button>
     <button class="btn" data-act="gallery" style="font-size:13px;margin-top:4px">🖼 Depuis la galerie</button>
+    <button class="btn" data-act="page" style="font-size:13px;margin-top:4px">📸 Scanner une page classeur (9 cartes)</button>
+    <button class="btn" data-act="importjson" style="font-size:13px;margin-top:4px">📂 Importer une liste JSON</button>
   </div>
   <div style="margin-top:14px">${rows}</div>
   ${S.scan.length ? `<button class="btn" data-act="clearscan">Vider les résultats</button>` : `<p class="muted" style="font-size:13px;margin-top:14px">Astuce : tiens la carte sous une bonne lumière, fond neutre, sans reflet sur le numéro en bas à droite.</p>`}`;
@@ -818,11 +826,10 @@ function parseOcrName(txt) {
     .slice(0, 50);
 }
 
-/* Compresse l'image pour Gemini (max 1280 px, JPEG 90 %) */
-async function compressForGemini(file) {
+/* Compresse l'image pour Gemini */
+async function compressImg(file, maxPx, q) {
   const bmp = await createImageBitmap(file);
-  const MAX = 1280;
-  const r = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+  const r = Math.min(1, maxPx / Math.max(bmp.width, bmp.height));
   const cv = document.createElement("canvas");
   cv.width = Math.round(bmp.width * r); cv.height = Math.round(bmp.height * r);
   cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
@@ -830,8 +837,10 @@ async function compressForGemini(file) {
     const rd = new FileReader();
     rd.onload = e => res({ b64: e.target.result.split(",")[1], mime: "image/jpeg" });
     rd.readAsDataURL(blob);
-  }, "image/jpeg", 0.90));
+  }, "image/jpeg", q));
 }
+const compressForGemini = f => compressImg(f, 1280, 0.90);
+const compressForPage   = f => compressImg(f, 2000, 0.88); // plus haute résolution pour 9 cartes
 
 /* Fallback image : FR 404 → EN ; pas d'URL → fetch TCGdex EN */
 const _enImgCache = {};
@@ -855,6 +864,74 @@ async function imgFb(el) {
     } catch { _enImgCache[key] = null; }
   }
   if (_enImgCache[key]) el.src = _enImgCache[key] + "/low.webp";
+}
+
+/* Scan d'une page classeur entière (plusieurs cartes en une photo) */
+async function scanPage(file) {
+  const entry = { status: "busy", found: [], _isPage: true };
+  S.scan.unshift(entry); render();
+  try {
+    const { b64, mime } = await compressForPage(file);
+    const resp = await fetch("/api/scan", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageBase64: b64, mimeType: mime, mode: "page" })
+    });
+    let g;
+    try { g = await resp.json(); } catch { g = { error: `HTTP ${resp.status}` }; }
+    if (!resp.ok || g.error) {
+      entry.status = "error"; entry.msg = `Gemini: ${g.error || "erreur"}`;
+    } else {
+      const cards = Array.isArray(g.cards) ? g.cards : [];
+      entry.debug = `Page : ${cards.length} carte(s) détectée(s) — confirme ou retire`;
+      // Résoudre chaque carte en parallèle (max 5 à la fois pour éviter le throttling)
+      const resolve = async det => {
+        let cands = det.number ? await lookupCard(det.number, det.total, det.setCode) : [];
+        if (!cands.length) cands = await matchCard({...det, language: S.lang, variant: "normal"});
+        return { det: {...det, language: S.lang, variant: "normal"}, cands, sel: 0, added: false };
+      };
+      const results = [];
+      for (let i = 0; i < cards.length; i += 5) {
+        const batch = await Promise.all(cards.slice(i, i + 5).map(resolve));
+        results.push(...batch);
+      }
+      entry.found = results;
+      entry.status = "done";
+    }
+  } catch(e) { entry.status = "error"; entry.msg = "analyse impossible (" + (e?.message || "erreur") + ")."; }
+  render();
+}
+
+/* Import d'un fichier JSON généré (par Claude ou autre) */
+async function importJson(data) {
+  if (!Array.isArray(data)) { toast("Format JSON invalide — tableau attendu."); return; }
+  const entry = { status: "busy", found: [], _isImport: true, debug: `Import : 0/${data.length}…` };
+  S.scan.unshift(entry); render();
+  let added = 0, skipped = 0;
+  for (let i = 0; i < data.length; i++) {
+    entry.debug = `Import : ${i + 1}/${data.length}…`; render();
+    const item = data[i];
+    const cardId = item.id || (item.setId && item.localId ? `${item.setId}-${item.localId}` : null);
+    if (!cardId) { skipped++; continue; }
+    try {
+      let c = await j(`${API}/${S.lang}/cards/${encodeURIComponent(cardId)}`);
+      if (!c?.id) c = await j(`${API}/en/cards/${encodeURIComponent(cardId)}`);
+      if (!c?.id) { skipped++; continue; }
+      const setId = c.id.slice(0, c.id.lastIndexOf("-"));
+      const doc = S.coll[c.id] ? {...S.coll[c.id]} : {
+        kind:"card", cardId:c.id, setId, name:c.name, localId:c.localId,
+        image:c.image||"", rarity:c.rarity||"", v:{}, cond:"Near Mint",
+        wish:false, addedAt:Date.now(), lang:S.lang.toUpperCase()
+      };
+      const variant = item.variant || "normal";
+      const n = Math.max(1, parseInt(item.qty, 10) || 1);
+      doc.v = {...doc.v, [variant]: (doc.v?.[variant] || 0) + n}; doc.wish = false;
+      Store.save(doc); added++;
+    } catch { skipped++; }
+  }
+  entry.status = "done";
+  entry.debug = `Import terminé : ${added} ajoutée(s)${skipped ? `, ${skipped} ignorée(s)` : ""}`;
+  toast(`Import : ${added} carte(s) ajoutée(s).`);
+  render();
 }
 
 async function scanFiles(files) {
@@ -1273,6 +1350,18 @@ document.addEventListener("click", e => {
   if (b.dataset.list) { S.listTab = b.dataset.list; return render(); }
   if (b.dataset.open) return openCard(b.dataset.open);
   if (b.dataset.pick) { const [i,k,c] = b.dataset.pick.split(":").map(Number); S.scan[i].found[k].sel = c; return render(); }
+  if (b.dataset.addall) {
+    const i = parseInt(b.dataset.addall); const entry = S.scan[i]; let count = 0;
+    for (let k = 0; k < entry.found.length; k++) {
+      const f = entry.found[k]; if (!f.cands.length || f.added) continue;
+      const c = f.cands[f.sel];
+      const variant = $(`#var-${i}-${k}`)?.value || "normal";
+      const doc = S.coll[c.id] ? {...S.coll[c.id]} : {kind:"card",cardId:c.id,setId:c.setId,name:c.name,localId:c.localId,image:c.image||"",v:{},cond:"Near Mint",wish:false,addedAt:Date.now(),lang:S.lang.toUpperCase()};
+      doc.v = {...doc.v,[variant]:(doc.v?.[variant]||0)+1}; doc.wish = false; f.added = true;
+      Store.save(doc); count++;
+    }
+    toast(`${count} carte(s) ajoutée(s).`); return render();
+  }
   if (b.dataset.addscan) {
     const [i,k] = b.dataset.addscan.split(":").map(Number); const f = S.scan[i].found[k]; const c = f.cands[f.sel];
     const variant = $(`#var-${i}-${k}`)?.value || "normal";
@@ -1287,6 +1376,8 @@ document.addEventListener("click", e => {
   if (act === "scan") return go("scan");
   if (act === "startvideo") return startVideoScan();
   if (act === "gallery") return $("#photo-gallery").click();
+  if (act === "page") return $("#photo-page").click();
+  if (act === "importjson") return $("#import-json").click();
   if (act === "clearscan") { S.scan = []; return render(); }
   if (act === "refresh") return refreshPrices(b);
   if (act === "export") return exportCsv();
@@ -1296,6 +1387,14 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("input", e => { if (e.target.id === "q") { clearTimeout(searchTimer); const v = e.target.value.trim(); searchTimer = setTimeout(() => doSearch(v), 350); } });
 $("#photo-gallery").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) scanFiles(files); });
+$("#photo-page").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) scanPage(f); });
+$("#import-json").addEventListener("change", e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = ev => { try { importJson(JSON.parse(ev.target.result)); } catch { toast("Fichier JSON invalide."); } };
+  rd.readAsText(f);
+});
 
 render();
 loadCatalog();

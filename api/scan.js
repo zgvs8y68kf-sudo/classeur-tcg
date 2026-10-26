@@ -7,17 +7,24 @@ export default async function handler(req, res) {
     const key = process.env.GEMINI_API_KEY;
     if (!key) { res.status(503).json({ error: "no_key" }); return; }
 
-    let imageBase64, mimeType = "image/jpeg";
+    let imageBase64, mimeType = "image/jpeg", mode = "card";
     try {
       const body = req.body || {};
       imageBase64 = body.imageBase64;
       mimeType = body.mimeType || "image/jpeg";
+      mode = body.mode === "page" ? "page" : "card";
     } catch (e) {
       res.status(400).json({ error: "body_parse_error", detail: e.message }); return;
     }
     if (!imageBase64) { res.status(400).json({ error: "no_image" }); return; }
 
-    const prompt = `Tu regardes la photo d'une carte Pokémon.
+    const prompt = mode === "page"
+      ? `Tu regardes une photo d'une page de classeur Pokémon (plusieurs cartes dans des pochettes plastiques).
+Liste TOUTES les cartes visibles, de gauche à droite puis haut en bas.
+Pour chaque carte extrais : name (nom du Pokémon), number (numéro avant le /), total (après le /), setCode (code extension).
+Réponds UNIQUEMENT en JSON : {"cards":[{"name":"...","number":"...","total":"...","setCode":"..."},...]}
+Tableau vide si aucune carte n'est identifiable.`
+      : `Tu regardes la photo d'une carte Pokémon.
 Extrais ces informations :
 - name   : le nom du Pokémon en haut de la carte (grand texte), sans stage, sans HP
 - number : le numéro collecteur avant le slash, ex "036" ; "" si non visible
@@ -65,15 +72,21 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
     const data = await gemRes.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
     let result;
-    try { result = JSON.parse(text); }
-    catch (e) { result = {}; }
+    try { result = JSON.parse(text); } catch (e) { result = {}; }
 
-    res.json({
-      name:    String(result.name    || "").trim().slice(0, 60),
-      number:  String(result.number  || "").replace(/\D/g, "").slice(0, 4),
-      total:   String(result.total   || "").replace(/\D/g, "").slice(0, 4),
-      setCode: String(result.setCode || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8)
+    const clean = r => ({
+      name:    String(r.name    || "").trim().slice(0, 60),
+      number:  String(r.number  || "").replace(/\D/g, "").slice(0, 4),
+      total:   String(r.total   || "").replace(/\D/g, "").slice(0, 4),
+      setCode: String(r.setCode || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8)
     });
+
+    if (mode === "page") {
+      const cards = Array.isArray(result.cards) ? result.cards : [];
+      res.json({ cards: cards.slice(0, 20).map(clean) });
+    } else {
+      res.json(clean(result));
+    }
   } catch (e) {
     res.status(500).json({ error: e.message || String(e), stack: String(e.stack || "").slice(0, 300) });
   }
