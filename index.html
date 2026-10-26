@@ -1062,7 +1062,7 @@ async function lookupCard(number, total, codeHint){
   if (hintId) {
     tried.add(hintId);
     const c = await lookupInSet(hintId, norm, S.lang) || await lookupInSet(hintId, norm, "en");
-    if (c) hits.push({...c, _s: 20});
+    if (c) return [{...c, _s: 20}]; // trouvé par code → pas besoin de balayer tout l'index
   }
 
   // 2. Index par total — toutes les extensions avec ce nb de cartes
@@ -1238,8 +1238,8 @@ async function vscanCapturePhoto(){
   const W = vid.videoWidth, H = vid.videoHeight; if (!W) return;
   vscanBadge("Analyse…");
 
-  // Capture compressée max 1280px (même que scan galerie)
-  const r = Math.min(1, 1280 / Math.max(W, H));
+  // Capture compressée max 800px (suffisant pour Gemini, plus rapide)
+  const r = Math.min(1, 800 / Math.max(W, H));
   const cv = document.createElement("canvas");
   cv.width = Math.round(W * r); cv.height = Math.round(H * r);
   cv.getContext("2d").drawImage(vid, 0, 0, cv.width, cv.height);
