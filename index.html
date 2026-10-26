@@ -813,6 +813,8 @@ function parseOcrName(txt) {
     // Retire un préfixe parasite de 1-2 chars suivi d'une majuscule (ex: "Il Pikachu")
     // sauf abréviations connues dans les noms Pokémon : Mr, Lt
     .replace(/^(?!Mr\s|Lt\s)[A-Za-z]{1,2}\s+(?=[A-ZÀÁÂÄÆÇÈÉÊËÎÏÔÙÚÛÜ])/u, "")
+    // Retire les chiffres parasites en fin de nom (ex: "Pikachu 704")
+    .replace(/\s+\d+$/, "")
     .slice(0, 50);
 }
 

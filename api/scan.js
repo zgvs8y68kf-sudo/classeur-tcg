@@ -34,13 +34,21 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
       generationConfig: { response_mime_type: "application/json", temperature: 0 }
     });
 
-    const ctrl = new AbortController();
-    setTimeout(() => ctrl.abort(), 6000);
-    const gemRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${key}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, signal: ctrl.signal }
-    );
-    const lastErr = gemRes.ok ? "" : await gemRes.text();
+    const models = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3-flash"];
+    let gemRes, lastErr = "";
+    for (const model of models) {
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), 5500);
+      try {
+        gemRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, signal: ctrl.signal }
+        );
+        if (gemRes.ok) break;
+        lastErr = await gemRes.text();
+        if (gemRes.status !== 503) break;
+      } catch { break; }
+    }
 
     if (!gemRes.ok) {
       res.status(502).json({ error: "gemini_error", status: gemRes.status, detail: lastErr.slice(0, 400) });
