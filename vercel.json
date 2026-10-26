@@ -1,10 +1,7 @@
 {
-  "headers": [
-    {
-      "source": "/tesseract/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=86400, immutable" }
-      ]
+  "functions": {
+    "api/scan.js": {
+      "maxDuration": 15
     }
-  ]
+  }
 }

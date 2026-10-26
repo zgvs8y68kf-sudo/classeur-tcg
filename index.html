@@ -847,9 +847,11 @@ async function scanFiles(files) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageBase64: b64, mimeType: mime })
         });
-        const g = await resp.json();
+        let g;
+        try { g = await resp.json(); }
+        catch { g = { error: `réponse non-JSON (HTTP ${resp.status})` }; }
         if (!resp.ok || g.error) {
-          geminiDebug = `Gemini erreur ${resp.status}: ${g.error||""} ${g.detail||""}`.trim();
+          geminiDebug = `Gemini HTTP ${resp.status}: ${g.error||""} ${g.detail||""}`.trim();
         } else if (g.name || g.number) {
           name = g.name || ""; number = g.number || "";
           total = g.total || ""; setCode = g.setCode || "";
