@@ -897,8 +897,15 @@ async function logoFb(el) {
     el.src = s.replace("/fr/", "/en/");
     return;
   }
-  // 4. première carte du set comme vignette (toujours disponible)
+  // 4. pokemontcg.io (IDs souvent identiques à TCGdex : sv1, swsh1, base1…)
   const sid = el.dataset.setid;
+  if (sid && !el._ptcg) {
+    el._ptcg = true;
+    el.onerror = () => logoFb(el);
+    el.src = `https://images.pokemontcg.io/${sid}/logo.png`;
+    return;
+  }
+  // 5. première carte du set comme vignette (toujours disponible)
   if (sid && !el._card) {
     el._card = true;
     if (!_logoCache[sid]) {
@@ -914,7 +921,7 @@ async function logoFb(el) {
       return;
     }
   }
-  // 5. texte en dernier recours
+  // 6. texte en dernier recours
   el.replaceWith(Object.assign(document.createElement("span"), {textContent: el.alt}));
 }
 
