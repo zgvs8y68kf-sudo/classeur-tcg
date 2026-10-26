@@ -34,24 +34,25 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
       generationConfig: { response_mime_type: "application/json", temperature: 0 }
     });
 
-    const models = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3-flash"];
+    // Race les 3 modèles en parallèle, timeout 7s global
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 7000);
     let gemRes = null, lastErr = "";
-    for (const model of models) {
-      const ctrl = new AbortController();
-      setTimeout(() => ctrl.abort(), 5500);
-      try {
-        gemRes = await fetch(
+    try {
+      const races = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3-flash"].map(model =>
+        fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
           { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, signal: ctrl.signal }
-        );
-        if (gemRes.ok) break;
-        lastErr = await gemRes.text();
-        if (gemRes.status !== 503) break;
-      } catch(e) { lastErr = e.message; break; }
-    }
+        ).then(r => r.ok ? r : Promise.reject({ status: r.status, text: () => r.text() }))
+      );
+      gemRes = await Promise.any(races);
+    } catch(e) {
+      if (e?.errors) lastErr = "503/404 tous modèles";
+      else lastErr = e?.message || String(e);
+    } finally { clearTimeout(timer); }
 
-    if (!gemRes?.ok) {
-      res.status(502).json({ error: "gemini_error", status: gemRes?.status, detail: lastErr.slice(0, 400) });
+    if (!gemRes) {
+      res.status(502).json({ error: "gemini_error", detail: lastErr.slice(0, 400) });
       return;
     }
 
