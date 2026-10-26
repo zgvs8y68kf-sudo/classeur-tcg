@@ -507,7 +507,7 @@ function viewSeries(){
 }
 function setTile(x){
   const own = ownedInSet(x.id), tot = x.official || x.total || 0, pct = tot ? Math.min(100, own/tot*100) : 0;
-  return `<button class="set" data-set="${esc(x.id)}"><div class="logo">${(x.logo||x.symbol) ? `<img src="${esc((x.logo||x.symbol))}.webp" alt="${esc(x.name)}" loading="lazy" data-symbol="${esc(x.symbol||"")}" onerror="logoFb(this)">` : `<span>${esc(x.name)}</span>`}</div>
+  return `<button class="set" data-set="${esc(x.id)}"><div class="logo">${(x.logo||x.symbol) ? `<img src="${esc((x.logo||x.symbol))}.webp" alt="${esc(x.name)}" loading="lazy" data-symbol="${esc(x.symbol||"")}" data-setid="${esc(x.id)}" onerror="logoFb(this)">` : `<span>${esc(x.name)}</span>`}</div>
     <div class="nm">${esc(x.name)}</div><div class="bar"><i class="${pct>=100?"full":""}" style="width:${pct}%"></i></div>
     <div class="cnt"><span>${own}/${tot}</span><span>${Math.round(pct)}%</span></div></button>`;
 }
@@ -873,7 +873,8 @@ async function imgFb(el) {
   if (_enImgCache[key]) el.src = _enImgCache[key] + "/low.webp";
 }
 
-function logoFb(el) {
+const _logoCache = {};
+async function logoFb(el) {
   el.onerror = null;
   const s = el.src || "";
   // 1. logo FR → logo EN
@@ -882,14 +883,38 @@ function logoFb(el) {
     el.src = s.replace("/fr/", "/en/");
     return;
   }
-  // 2. logo EN (ou neutre) → symbole
+  // 2. → symbole de l'extension
   if (!el._sym && el.dataset.symbol) {
     el._sym = true;
     el.onerror = () => logoFb(el);
     el.src = el.dataset.symbol + ".webp";
     return;
   }
-  // 3. texte
+  // 3. symbole FR → symbole EN
+  if (el._sym && !el._symEn && s.includes("/fr/")) {
+    el._symEn = true;
+    el.onerror = () => logoFb(el);
+    el.src = s.replace("/fr/", "/en/");
+    return;
+  }
+  // 4. première carte du set comme vignette (toujours disponible)
+  const sid = el.dataset.setid;
+  if (sid && !el._card) {
+    el._card = true;
+    if (!_logoCache[sid]) {
+      try {
+        const r = await fetch(`https://api.tcgdex.net/v2/en/sets/${sid}`);
+        _logoCache[sid] = r.ok ? ((await r.json()).cards?.[0]?.image || null) : null;
+      } catch { _logoCache[sid] = null; }
+    }
+    if (_logoCache[sid]) {
+      el.onerror = () => { el.onerror = null; el.replaceWith(Object.assign(document.createElement("span"), {textContent: el.alt})); };
+      el.style.opacity = "0.65";
+      el.src = _logoCache[sid] + "/low.webp";
+      return;
+    }
+  }
+  // 5. texte en dernier recours
   el.replaceWith(Object.assign(document.createElement("span"), {textContent: el.alt}));
 }
 
