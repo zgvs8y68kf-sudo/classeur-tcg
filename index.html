@@ -203,7 +203,6 @@ nav.tabs .scan .orb svg{width:26px;height:26px}
   <button data-tab="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Chercher</button>
   <button data-tab="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.4-9.3-9A5 5 0 0 1 12 6a5 5 0 0 1 9.3 6c-2.3 4.6-9.3 9-9.3 9z"/></svg>Listes</button>
 </nav>
-<input type="file" id="photo" accept="image/*" capture="environment" multiple hidden>
 <input type="file" id="photo-gallery" accept="image/*" multiple hidden>
 
 <script>
@@ -219,7 +218,7 @@ const GRADERS = ["","PCA","PSA","CGC","BGS","Collect Aura"];
 
 /* Table des codes imprimés sur les cartes → identifiants TCGdex */
 const PRINT_CODE = {
-  "SVI":"sv1","PAL":"sv2","OBF":"sv3","PAF":"sv3pt5","TEF":"sv5","TWM":"sv6","SCR":"sv7","SSP":"sv8","PRE":"sv9","SFA":"sv4pt5",
+  "SVI":"sv1","PAL":"sv2","OBF":"sv3","PAF":"sv4pt5","TEF":"sv5","TWM":"sv6","SCR":"sv7","SSP":"sv8","PRE":"sv9","SFA":"sv4pt5",
   "SSH":"swsh1","RCL":"swsh2","DAA":"swsh3","VIV":"swsh4","BST":"swsh5","CRE":"swsh6","EVS":"swsh7",
   "FST":"swsh8","BRS":"swsh9","ASR":"swsh10","LOR":"swsh11","SIT":"swsh12","CRZ":"swsh12pt5",
   "SUM":"sm1","GRI":"sm2","BUS":"sm3","CIN":"sm35","UPR":"sm5","FLI":"sm6","CES":"sm7",
@@ -480,7 +479,7 @@ function viewHome(){
     </div>
     ${lastStr ? `<p class="muted" style="font-size:12px;margin:10px 0 0">${lastStr} · Cardmarket via TCGdex</p>` : ""}
   </section>
-  ${empty ? `<div class="empty"><p style="font-size:16px;color:var(--fg);font-weight:600;margin:0 0 6px">Ton classeur est vide</p><p style="margin:0">Scanne une carte (ou une page de classeur entière) avec le bouton rouge, ou ouvre <b>Séries</b> pour cocher tes cartes à la main.</p></div>` : `
+  ${empty ? `<div class="empty"><p style="font-size:16px;color:var(--fg);font-weight:600;margin:0 0 6px">Ton classeur est vide</p><p style="margin:0">Scanne une carte avec le bouton rouge, ou ouvre <b>Séries</b> pour cocher tes cartes à la main.</p></div>` : `
   <h2>Cartes les plus chères</h2>
   <div class="list">${top.length ? top.map(x => itemRow(x.d, eur(x.v))).join("") : `<p class="muted">Appuie sur « Actualiser les prix » pour récupérer les cotes.</p>`}</div>
   <h2>Ajoutées récemment</h2>
@@ -517,7 +516,6 @@ async function viewSet(app){
   const cards = set.cards.filter(c => { const d = S.coll[c.id], q = d ? qty(d) : 0;
     return f === "all" || (f === "own" && q) || (f === "miss" && !q) || (f === "dup" && q > 1); });
   const own = ownedInSet(id), tot = set.cardCount?.official || meta?.official || set.cards.length;
-  let missCost = 0;
   app.innerHTML = `
   <div class="toolbar">
     <button class="iconbtn" data-act="back" aria-label="Retour aux séries">← Séries</button>
@@ -677,14 +675,6 @@ async function openCard(id){
 }
 
 /* ---------- scan (OCR local) ---------- */
-async function shrink(file){
-  const bmp = await createImageBitmap(file).catch(() => null);
-  if (!bmp) return file;
-  const m = 1568 / Math.max(bmp.width, bmp.height), s = Math.min(1, m);
-  const cv = document.createElement("canvas"); cv.width = Math.round(bmp.width*s); cv.height = Math.round(bmp.height*s);
-  cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
-  return await new Promise(r => cv.toBlob(b => r(b || file), "image/jpeg", 0.88));
-}
 
 /* ---- OCR (Tesseract.js) ---- */
 let _ocrWorker = null;
@@ -806,8 +796,6 @@ async function matchCard(det){
     const set = S.catalog?.sets?.[c.setId];
     if (set && tot && (set.official === tot)) s += 6;
     if (c.name.toLowerCase() === name.toLowerCase()) s += 2;
-    if (det.hp   && Number(c.hp) === Number(det.hp)) s += 3;
-    if (det.regulation && c.regulationMark && c.regulationMark.toUpperCase() === String(det.regulation).toUpperCase()) s += 2;
     return s;
   };
   return pool.map(c => ({...c, _s: score(c)})).sort((a,b) => b._s - a._s);
@@ -1039,9 +1027,8 @@ async function vscanCapturePhoto(){
   // 2. Tesseract OCR (rapide, gratuit, local)
   if (!normNum(number) && _ocrWorker) {
     try {
-      const numCv2 = buildOcrCanvas(frame, Math.round(W*0.05), Math.round(H*0.78), Math.round(W*0.90), Math.round(H*0.20), 4);
       await _ocrWorker.setParameters({tessedit_pageseg_mode:11});
-      const { data:{text} } = await _ocrWorker.recognize(numCv2);
+      const { data:{text} } = await _ocrWorker.recognize(numCv);
       const p = parseOcrNumber(text.trim()); number = p.number; total = p.total; setCode = p.setCode;
     } catch(e){}
   }
@@ -1151,7 +1138,6 @@ document.addEventListener("click", e => {
   if (act === "acct") return S.user ? Store.signOut() : Store.signIn();
   if (act === "scan") return go("scan");
   if (act === "startvideo") return startVideoScan();
-  if (act === "photo") return $("#photo").click();
   if (act === "gallery") return $("#photo-gallery").click();
   if (act === "clearscan") { S.scan = []; return render(); }
   if (act === "refresh") return refreshPrices(b);
@@ -1161,7 +1147,6 @@ document.addEventListener("click", e => {
   if (act === "tosearch") { go("search"); const q = $("#q"); if (q) { q.value = b.dataset.q; doSearch(b.dataset.q.trim()); } }
 });
 document.addEventListener("input", e => { if (e.target.id === "q") { clearTimeout(searchTimer); const v = e.target.value.trim(); searchTimer = setTimeout(() => doSearch(v), 350); } });
-$("#photo").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) scanFiles(files); });
 $("#photo-gallery").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) scanFiles(files); });
 
 render();
