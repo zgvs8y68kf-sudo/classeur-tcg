@@ -181,6 +181,9 @@ nav.tabs .scan .orb svg{width:26px;height:26px}
 .vscard img{width:62px;height:86px;object-fit:contain;border-radius:4px}
 .vscard small{font-size:10px;max-width:66px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
 #vscan-confirm{display:flex;flex-direction:column;gap:8px;padding-top:2px}
+@keyframes vsCardIn{from{transform:translateY(28px) scale(.84);opacity:0}to{transform:translateY(0) scale(1);opacity:1}}
+.vscan-found{display:flex;gap:12px;align-items:center;animation:vsCardIn .42s cubic-bezier(.34,1.56,.64,1)}
+.vscan-found img{width:56px;height:78px;object-fit:cover;border-radius:7px;box-shadow:0 4px 14px rgba(0,0,0,.45);flex-shrink:0}
 </style>
 
 </head>
@@ -1343,7 +1346,7 @@ function _vscanDoAdd(c, resDiv) {
   VS.currentCands=null; VS.currentSel=0; VS.currentVariant="normal"; VS.buffer=[];
   document.getElementById("vscan-vars")?.querySelectorAll("[data-vsvar]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.vsvar==="normal"));
   const inp=document.getElementById("vscan-q"); if(inp) inp.value="";
-  if (resDiv?.isConnected) resDiv.innerHTML=`<div style="font-size:13px;color:var(--text);padding:2px 0">✅ <b>${esc(c.name)}</b> <span style="color:var(--muted);font-size:11px">${esc(S.catalog?.sets?.[c.setId]?.name?.slice(0,14)||c.setId)}</span><br><span style="font-size:11px;color:var(--muted)">Pointe la carte suivante.</span></div>`;
+  if (resDiv?.isConnected) resDiv.innerHTML=`<div class="vscan-found">${c.image?`<img src="${esc(c.image)}/low.webp" alt="">`:`<div style="width:56px;height:78px;border-radius:7px;background:var(--sunk);flex-shrink:0"></div>`}<div><div style="font-size:14px;font-weight:700">✅ ${esc(c.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(S.catalog?.sets?.[c.setId]?.name?.slice(0,18)||c.setId)} · #${esc(c.localId)}</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Pointe la carte suivante.</div></div></div>`;
   vscanBadge("✓ " + c.name.slice(0,20));
   setTimeout(()=>vscanBadge("Pointe le bas de la carte"),2500);
 }
