@@ -697,7 +697,8 @@ async function getOcrWorker() {
   return _ocrWorker;
 }
 
-/* Détecte le rectangle de la carte dans l'image par projection de gradient.
+/* Détecte le rectangle de la carte en comparant chaque pixel au fond.
+   Le fond est estimé depuis les 4 coins de l'image.
    Retourne {x,y,w,h} dans les coords originales, ou l'image entière en fallback. */
 function detectCard(bmp) {
   const MAX = 500;
@@ -705,49 +706,54 @@ function detectCard(bmp) {
   const sw = Math.round(bmp.width * ratio), sh = Math.round(bmp.height * ratio);
   const tmp = document.createElement("canvas");
   tmp.width = sw; tmp.height = sh;
-  const ctx = tmp.getContext("2d");
-  ctx.drawImage(bmp, 0, 0, sw, sh);
-  const px = ctx.getImageData(0, 0, sw, sh).data;
+  const tctx = tmp.getContext("2d");
+  tctx.drawImage(bmp, 0, 0, sw, sh);
+  const px = tctx.getImageData(0, 0, sw, sh).data;
 
   // Niveaux de gris
-  const g = new Uint8Array(sw * sh);
-  for (let i = 0; i < g.length; i++)
-    g[i] = (77*px[i*4] + 150*px[i*4+1] + 29*px[i*4+2]) >> 8;
+  const gv = new Uint8Array(sw * sh);
+  for (let i = 0; i < gv.length; i++)
+    gv[i] = (77*px[i*4] + 150*px[i*4+1] + 29*px[i*4+2]) >> 8;
 
-  // Projections du gradient Sobel (énergie par ligne / colonne)
-  const rp = new Float32Array(sh), cp = new Float32Array(sw);
-  for (let y = 1; y < sh-1; y++)
-    for (let x = 1; x < sw-1; x++) {
-      const m = Math.hypot(g[y*sw+x+1] - g[y*sw+x-1], g[(y+1)*sw+x] - g[(y-1)*sw+x]);
-      rp[y] += m; cp[x] += m;
-    }
-
-  // Lissage (boîte ±5px) pour réduire le bruit
-  const smooth = (a, r) => {
-    const b = new Float32Array(a.length);
-    for (let i = 0; i < a.length; i++) {
-      let s = 0, n = 0;
-      for (let j = Math.max(0,i-r); j <= Math.min(a.length-1,i+r); j++,n++) s += a[j];
-      b[i] = s / n;
-    }
-    return b;
+  // Couleur de fond : moyenne des 4 coins (8 % de la plus petite dimension)
+  const cr = Math.max(5, Math.round(Math.min(sw, sh) * 0.08));
+  let bgR = 0, bgG = 0, bgB = 0, bgN = 0;
+  const addCorner = (x, y) => {
+    const i = (y*sw+x)*4;
+    bgR += px[i]; bgG += px[i+1]; bgB += px[i+2]; bgN++;
   };
-  const srp = smooth(rp, 5), scp = smooth(cp, 5);
+  for (let y = 0; y < cr; y++) for (let x = 0; x < cr; x++) addCorner(x, y);
+  for (let y = 0; y < cr; y++) for (let x = sw-cr; x < sw; x++) addCorner(x, y);
+  for (let y = sh-cr; y < sh; y++) for (let x = 0; x < cr; x++) addCorner(x, y);
+  for (let y = sh-cr; y < sh; y++) for (let x = sw-cr; x < sw; x++) addCorner(x, y);
+  const bgr = bgR/bgN, bgg = bgG/bgN, bgb = bgB/bgN;
 
-  // Premier / dernier dépassement de seuil (25 % du max) depuis l'extérieur
-  const rt = Math.max(...srp) * 0.25, ct = Math.max(...scp) * 0.25;
-  let top = 2, bot = sh-3, lft = 2, rgt = sw-3;
-  for (let y = 2; y < sh-2; y++) if (srp[y] > rt) { top = y; break; }
-  for (let y = sh-3; y >= 2; y--) if (srp[y] > rt) { bot = y; break; }
-  for (let x = 2; x < sw-2; x++) if (scp[x] > ct) { lft = x; break; }
-  for (let x = sw-3; x >= 2; x--) if (scp[x] > ct) { rgt = x; break; }
+  // Score par ligne / colonne : proportion de pixels qui diffèrent du fond (seuil 30)
+  const THR = 30;
+  const rowScore = new Uint16Array(sh);
+  const colScore = new Uint16Array(sw);
+  for (let y = 0; y < sh; y++)
+    for (let x = 0; x < sw; x++) {
+      const i = (y*sw+x)*4;
+      if (Math.abs(px[i]-bgr) + Math.abs(px[i+1]-bgg) + Math.abs(px[i+2]-bgb) > THR) {
+        rowScore[y]++; colScore[x]++;
+      }
+    }
 
-  // Sanité : si la zone détectée est trop petite → fallback image entière
+  // Première / dernière ligne / colonne avec > 15 % de pixels non-fond
+  const rThr = sw * 0.15, cThr = sh * 0.15;
+  let top = 0, bot = sh-1, lft = 0, rgt = sw-1;
+  for (let y = 0; y < sh; y++) if (rowScore[y] > rThr) { top = y; break; }
+  for (let y = sh-1; y >= 0; y--) if (rowScore[y] > rThr) { bot = y; break; }
+  for (let x = 0; x < sw; x++) if (colScore[x] > cThr) { lft = x; break; }
+  for (let x = sw-1; x >= 0; x--) if (colScore[x] > cThr) { rgt = x; break; }
+
+  // Sanité : carte détectée = couvre au moins 35 % de chaque dimension
   if ((rgt - lft) < sw * 0.35 || (bot - top) < sh * 0.35)
     return { x: 0, y: 0, w: bmp.width, h: bmp.height, _detected: false };
 
-  // Retour en coordonnées originales + petite marge
-  const pad = Math.round(6 / ratio);
+  // Retour en pixels originaux avec une petite marge de sécurité
+  const pad = Math.round(8 / ratio);
   const ox = Math.max(0, Math.round(lft / ratio) - pad);
   const oy = Math.max(0, Math.round(top / ratio) - pad);
   const or = Math.min(bmp.width,  Math.round(rgt / ratio) + pad);
