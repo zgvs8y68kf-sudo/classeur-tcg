@@ -550,7 +550,7 @@ function viewScan(){
   <div class="drop">
     <div class="ico"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3.2"/></svg></div>
     <b style="font-size:16px">Scanner une carte Pokémon</b>
-    <span class="muted" style="font-size:13px;max-width:36em">OCR local — aucun service payant. Pointe la caméra vers le bas de la carte (numéro + code extension) et le nom en haut.</span>
+    <span class="muted" style="font-size:13px;max-width:36em">Reconnaissance par IA (Gemini) — bonne lumière, carte bien cadrée.</span>
     <button class="btn primary" data-act="startvideo" style="font-size:16px;padding:14px 28px">▶ Démarrer le scanner</button>
     <button class="btn" data-act="gallery" style="font-size:13px;margin-top:4px">🖼 Depuis la galerie</button>
   </div>
@@ -674,7 +674,7 @@ async function openCard(id){
   scrim.addEventListener("change", () => { commit(); });
 }
 
-/* ---------- scan (OCR local) ---------- */
+/* ---------- scan ---------- */
 
 /* ---- OCR (Tesseract.js) ---- */
 let _ocrWorker = null;
