@@ -806,10 +806,13 @@ function parseOcrNumber(txt) {
 function parseOcrName(txt) {
   return txt
     .split("\n")[0]
-    .replace(/\s*HP\s*\d+/i, "")          // enlève "HP 70", "hp70"…
+    .replace(/\s*HP\s*\d+/i, "")
     .replace(/[^\p{L}\p{N}\s\-'\.]/gu, " ")
     .replace(/\s+/g, " ")
     .trim()
+    // Retire un préfixe parasite de 1-2 chars suivi d'une majuscule (ex: "Il Pikachu")
+    // sauf abréviations connues dans les noms Pokémon : Mr, Lt
+    .replace(/^(?!Mr\s|Lt\s)[A-Za-z]{1,2}\s+(?=[A-ZÀÁÂÄÆÇÈÉÊËÎÏÔÙÚÛÜ])/u, "")
     .slice(0, 50);
 }
 
@@ -842,7 +845,9 @@ async function scanFiles(files) {
       if (!cands.length) cands = await matchCard(det);
       entry.found = [{ det, cands, sel: 0, added: false }];
       entry.status = "done";
-      entry.debug = (card._detected ? "Carte détectée" : "Image entière") + " | OCR" + (name||number ? ` → ${[name, number && (number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ")}` : " → rien détecté");
+      const parsedStr = [name, number && (number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ");
+      const rawStr = `nom:"${nameText.replace(/\n/g,"↵").slice(0,25)}" n°:"${numText.replace(/\n/g,"↵").slice(0,30)}"`;
+      entry.debug = (card._detected ? "Carte détectée" : "Image entière") + " | OCR" + (parsedStr ? ` → ${parsedStr}` : " → rien") + ` | brut: ${rawStr}`;
     } catch(e) {
       entry.status = "error";
       entry.msg = "analyse impossible (" + (e?.message || "erreur") + ").";
