@@ -39,7 +39,7 @@ Les seules cartes qui peuvent figurer dans missingCards sont :
   ✅ Dresseurs courants (Poké Ball, Super Ball, Pokédex, Professeur Magnolia, Marnie, Boss Orders, etc.)
   ✅ Énergies Spéciales (Double Turbo Energy, Choice Belt, etc.) si vraiment utiles
   ✅ Pokémon de base COMMUNS et peu coûteux (Bidoof, Ralts bas niveau pour alimenter une chaîne, etc.)
-  ❌ JAMAIS un Pokémon-ex, V, VMAX, VSTAR, Full Art, Alt Art dans missingCards
+  ❌ JAMAIS un Pokémon-ex, V, VMAX, VSTAR, GX, EX, Full Art, Alt Art dans missingCards
   ❌ JAMAIS le Pokémon principal ou d'évolution rare dans missingCards
   ❌ JAMAIS plus de 4 cartes manquantes par deck
 
@@ -52,6 +52,7 @@ RÈGLES OFFICIELLES TCG (non négociables)
 • Énergies Spéciales : limitées à 4 exemplaires
 • Au moins 1 Pokémon de Base pour la main initiale (7 cartes)
 • 6 cartes Récompense mises de côté au début
+• Récompenses lors d'un KO : Pokémon normal = 1 · Pokémon-ex/GX/EX/V/VSTAR = 2 · VMAX/V-UNION/ESCOUADE = 3
 
 STRUCTURE RECOMMANDÉE :
   • 10-16 Pokémon : 4-6 Pokémon de Base + leur(s) évolution(s) + support (Bibarel pour piocher, etc.)

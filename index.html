@@ -1085,9 +1085,27 @@ function toggleCond(pIdx, condKey){
   saveBattleState(); render();
 }
 
+function prizesForPoke(name){
+  const n = (name||"").toUpperCase();
+  if (/\bV-UNION\b/.test(n)||/ESCOUADE/.test(n)||/-VMAX$/.test(n)) return 3;
+  if (/-EX$/.test(n)||/-GX$/.test(n)||/\bEX$/.test(n)||/-V$/.test(n)||/-VSTAR$/.test(n)) return 2;
+  return 1;
+}
+
 function koPoke(pIdx){
   const p = S.battleState.players[pIdx]; if (!p.active) return;
-  battleLog(`T${S.battleState.turn} 💀 <b>KO!</b> — ${p.name} : ${p.active.name} est mis hors-jeu`);
+  const koName = p.active.name;
+  const prizes = prizesForPoke(koName);
+  const opp = S.battleState.players[1-pIdx];
+  const prizeBadge = prizes > 1 ? ` <span style="background:#7c3aed;color:#fff;border-radius:4px;padding:1px 5px;font-size:11px">×${prizes} Récompenses</span>` : "";
+  battleLog(`T${S.battleState.turn} 💀 <b>KO!</b> — ${p.name} : ${koName} est mis hors-jeu${prizeBadge}`);
+  // Award prizes to opponent
+  const taken = Math.min(prizes, opp.prizes);
+  if (taken > 0) {
+    opp.prizes -= taken;
+    if (opp.prizes === 0) battleLog(`🏆 <b>${opp.name}</b> prend ${taken} récompense${taken>1?"s":""} et remporte la partie !`);
+    else battleLog(`<b>${opp.name}</b> prend ${taken} récompense${taken>1?"s":""} (${opp.prizes} restante${opp.prizes>1?"s":""})`);
+  }
   // Move active to discard, bench[0] promotes if exists
   const next = p.bench.find(b=>b);
   p.active = null;
@@ -1391,7 +1409,7 @@ function renderPlayerArea(p, pIdx){
     ${[10,30,50,90].map(n=>`<button data-act="appdmg" data-pidx="${pIdx}" data-slot="active" data-dmg="${n}">−${n}</button>`).join("")}
     <button data-act="custdmg" data-pidx="${pIdx}" data-slot="active">−?</button>
     <button class="heal-btn" data-act="healpoke" data-pidx="${pIdx}" data-slot="active" data-heal="30">+30 ❤️</button>
-    ${p.active?.hp===0 ? `<button class="ko-btn" data-act="kopoke" data-pidx="${pIdx}">KO 💀</button>` : ''}
+    ${p.active?.hp===0 ? `<button class="ko-btn" data-act="kopoke" data-pidx="${pIdx}" title="${prizesForPoke(p.active.name)} récompense(s) pour l'adversaire">KO 💀 ×${prizesForPoke(p.active.name)}</button>` : ''}
   </div>` : '';
 
   const bench = Array.from({length:5}, (_,i) => {
