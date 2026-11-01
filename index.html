@@ -988,6 +988,16 @@ async function openCard(id, deck=[], dir=null){
   const scrim = document.createElement("div"); scrim.className = "scrim";
   scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="Fiche carte"><div class="grab"></div><p class="muted"><span class="spinner"></span> Chargement…</p></div>`;
   document.body.appendChild(scrim);
+  // Animation d'entrée dès l'apparition du scrim (avant même loadCard)
+  if (dir) {
+    const _sh = scrim.querySelector(".sheet");
+    _sh.style.transform = `translateX(${dir === 'right' ? window.innerWidth : -window.innerWidth}px)`;
+    _sh.style.transition = 'none';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      _sh.style.transition = 'transform 0.28s cubic-bezier(0.25,0.46,0.45,0.94)';
+      _sh.style.transform = 'translateX(0)';
+    }));
+  }
   const close = () => { document.removeEventListener("keydown", _onKey); scrim.remove(); render(); };
   scrim.addEventListener("click", e => { if (e.target === scrim) close(); });
   const c = await loadCard(id);
@@ -1105,7 +1115,9 @@ async function openCard(id, deck=[], dir=null){
     sh.style.transition = `transform ${dur}s cubic-bezier(0.55,0,1,0.45), opacity ${dur}s`;
     sh.style.transform = `translateX(${outDir === 'left' ? -W()*1.1 : W()*1.1}px)`;
     sh.style.opacity = '0';
-    setTimeout(() => { scrim.remove(); openCard(nid, deck, outDir === 'left' ? 'right' : 'left'); }, dur*1000 + 10);
+    // Nouveau scrim créé immédiatement (recouvre l'ancien, pas de flash de la page)
+    openCard(nid, deck, outDir === 'left' ? 'right' : 'left');
+    setTimeout(() => scrim.remove(), dur*1000 + 10);
   };
   const _onKey = e => {
     if (e.key === "ArrowLeft"  && prevId) { e.preventDefault(); goTo(prevId, 'right'); }
@@ -1123,17 +1135,6 @@ async function openCard(id, deck=[], dir=null){
     if (nextId) { const b = document.createElement("button"); b.className = "iconbtn"; b.id = "nextbtn"; b.setAttribute("aria-label","Carte suivante"); b.textContent = "›"; b.style.cssText = "position:absolute;right:8px;top:10px;font-size:22px;line-height:1"; hdr.appendChild(b); }
   };
   paintWithNav();
-
-  // Animation d'entrée depuis le côté opposé
-  if (dir) {
-    const sh = scrim.querySelector(".sheet");
-    sh.style.transform = `translateX(${dir === 'right' ? W() : -W()}px)`;
-    sh.style.transition = 'none';
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      sh.style.transition = 'transform 0.28s cubic-bezier(0.25,0.46,0.45,0.94)';
-      sh.style.transform = 'translateX(0)';
-    }));
-  }
 
   scrim.addEventListener("click", e => {
     const t = e.target.closest("button"); if (!t) return;
