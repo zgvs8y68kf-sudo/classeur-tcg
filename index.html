@@ -739,9 +739,9 @@ function viewScan(){
     <button class="btn" data-act="gallery" style="font-size:13px;margin-top:4px">🖼 Depuis la galerie</button>
     <button class="btn" data-act="page" style="font-size:13px;margin-top:4px">📸 Scanner une page classeur (9 cartes)</button>
     <button class="btn" data-act="importjson" style="font-size:13px;margin-top:4px">📂 Importer une liste JSON</button>
+    ${S.scan.length ? `<button class="btn" data-act="clearscan" style="font-size:13px;margin-top:4px;color:var(--muted)">🗑 Vider les résultats</button>` : ""}
   </div>
-  <div style="margin-top:14px">${rows}</div>
-  ${S.scan.length ? `<button class="btn" data-act="clearscan">Vider les résultats</button>` : `<p class="muted" style="font-size:13px;margin-top:14px">Astuce : tiens la carte sous une bonne lumière, fond neutre, sans reflet sur le numéro en bas à droite.</p>`}`;
+  ${S.scan.length ? `<div style="margin-top:14px">${rows}</div>` : `<p class="muted" style="font-size:13px;margin-top:14px">Astuce : tiens la carte sous une bonne lumière, fond neutre, sans reflet sur le numéro en bas à droite.</p>`}`;
 }
 
 function viewSearch(){
@@ -1121,6 +1121,7 @@ async function logoFb(el) {
 
 /* Scan d'une page classeur entière (plusieurs cartes en une photo) */
 async function scanPage(file) {
+  S.scan = [];
   const entry = { status: "busy", found: [], _isPage: true };
   S.scan.unshift(entry); render();
   try {
@@ -1188,6 +1189,7 @@ async function importJson(data) {
 }
 
 async function scanFiles(files) {
+  S.scan = [];
   for (const file of files) {
     const entry = { status: "busy", found: [] }; S.scan.unshift(entry); render();
     try {
