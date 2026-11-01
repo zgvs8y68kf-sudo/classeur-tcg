@@ -384,6 +384,29 @@ async function loadCatalog(force){
         out.push({id:s.id, name:s.name, logo:s.logo, releaseDate:d.releaseDate || "", order:frSeries.length + enOnly.indexOf(s), sets: ss});
       } catch {}
     });
+    // 3) Sets orphelins non rattachés à une série (promos spéciales, énergies, CLC…)
+    //    Fetch liste plate FR + EN, ajouter tout ce qui n'a pas encore été vu
+    try {
+      const [frFlat, enFlat] = await Promise.all([
+        j(`${API}/${S.lang}/sets`).catch(() => []),
+        S.lang !== "en" ? j(`${API}/en/sets`).catch(() => []) : Promise.resolve([])
+      ]);
+      const knownIds = new Set(Object.keys(sets));
+      // FR d'abord, puis EN pour ne pas écraser
+      const orphans = new Map();
+      for (const x of [...frFlat, ...enFlat]) {
+        if (!knownIds.has(x.id) && !orphans.has(x.id)) orphans.set(x.id, x);
+      }
+      if (orphans.size > 0) {
+        const miscSets = [...orphans.values()].map(x => ({
+          id:x.id, name:x.name||x.id, logo:x.logo||"", symbol:x.symbol||"",
+          total:x.cardCount?.total||0, official:x.cardCount?.official||x.cardCount?.total||0,
+          serie:"_misc"
+        }));
+        miscSets.forEach(x => sets[x.id] = x);
+        out.push({id:"_misc", name:"Promos & Divers", logo:"", releaseDate:"", order:9999, sets: miscSets});
+      }
+    } catch {}
     out.sort((a,b) => (b.releaseDate||"").localeCompare(a.releaseDate||"") || b.order - a.order);
     S.catalog = {at: Date.now(), series: out, sets};
     buildTotalIndex();
@@ -397,9 +420,15 @@ async function loadSet(id){
   if (S.setCache[k]) return S.setCache[k];
   let d;
   try { d = await j(`${API}/${S.lang}/sets/${encodeURIComponent(id)}`); } catch {}
-  // Fallback EN si le set FR n'a pas de cartes (données manquantes TCGdex)
-  if ((!d || !d.cards?.length) && S.lang !== "en") {
-    try { d = await j(`${API}/en/sets/${encodeURIComponent(id)}`); } catch {}
+  // Fallback EN si FR n'a pas de cartes OU si FR est incomplet (énergies, promos manquantes)
+  const frTotal = d?.cardCount?.total || d?.cardCount?.official || 0;
+  const frHasAll = d?.cards?.length && (!frTotal || d.cards.length >= frTotal);
+  if ((!frHasAll) && S.lang !== "en") {
+    try {
+      const en = await j(`${API}/en/sets/${encodeURIComponent(id)}`);
+      // Garder le set EN seulement s'il a plus de cartes
+      if ((en?.cards?.length || 0) > (d?.cards?.length || 0)) d = en;
+    } catch {}
   }
   if (!d) throw new Error("Set introuvable");
   d.cards = (d.cards || []).slice().sort((a,b) => natCmp(a.localId, b.localId));
