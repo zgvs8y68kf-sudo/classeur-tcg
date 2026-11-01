@@ -7,29 +7,34 @@ export default async function handler(req, res) {
     const key = process.env.GEMINI_API_KEY;
     if (!key) { res.status(503).json({ error: "no_key" }); return; }
 
-    const { cards = [] } = req.body || {};
+    const { cards = [], preferredGrader = "PSA" } = req.body || {};
     if (!cards.length) { res.status(400).json({ error: "no_cards" }); return; }
+
+    const graderCosts = { PSA: "35€", PCA: "15€", BGS: "30€", CGC: "25€", Beckett: "30€" };
+    const cost = graderCosts[preferredGrader] || "30€";
 
     // Liste avec le cardId explicite pour que Gemini le retourne tel quel
     const cardList = cards.map(c => `- [${c.cardId}] ${c.name} (${c.setId})${c.value > 0 ? ` : ${c.value.toFixed(2)} €` : ""}`).join("\n");
 
-    const prompt = `Tu es un expert en cartes Pokémon et en grading (PSA, PCA, BGS, PCA France).
-Voici la collection complète de cartes Pokémon non-gradées d'un collectionneur :
+    const prompt = `Tu es un expert en cartes Pokémon et en grading (PSA, PCA, BGS, CGC).
+Le collectionneur préfère envoyer ses cartes chez **${preferredGrader}** (tarif ~${cost}).
+Voici sa collection de cartes Pokémon non-gradées :
 
 ${cardList}
 
-Analyse chaque carte et sélectionne celles qui valent VRAIMENT le coup d'être gradées.
+Analyse et sélectionne celles qui valent VRAIMENT le coup d'être gradées chez ${preferredGrader}.
 Critères principaux :
 - Popularité du Pokémon (Pikachu, Charizard, Mewtwo, starters = forte demande)
 - Édition et rareté : cartes vintage (Base Set, Fossil, Jungle, Neo), holographiques, Full Art, Alt Art
-- Multiplicateur de valeur estimé après PSA 10 (×2 minimum pour que ce soit rentable)
-- Coût du grading à déduire : ~35€ PSA, ~15€ PCA — si la carte vaut moins de 10€, c'est rarement rentable
+- Multiplicateur de valeur estimé après ${preferredGrader} 10 (×2 minimum pour que ce soit rentable)
+- Coût du grading à déduire : ~${cost} chez ${preferredGrader} — si la carte vaut moins de 10€, c'est rarement rentable
 - Priorité : "haute" = gain net probable > 50€, "moyenne" = gain net > 20€, "basse" = intéressant mais incertain
+- Recommande ${preferredGrader} en premier choix, mais indique une alternative si une autre société est plus adaptée à la carte
 
 IMPORTANT : retourne le champ "cardId" EXACTEMENT comme il apparaît entre crochets [] dans la liste ci-dessus.
 
 Réponds UNIQUEMENT en JSON valide :
-{"recommendations":[{"cardId":"id-exact-de-la-liste","name":"...","reason":"explication courte en français","priority":"haute|moyenne|basse","grader":"PSA|PCA|BGS","multiplier":3.0}]}
+{"recommendations":[{"cardId":"id-exact-de-la-liste","name":"...","reason":"explication courte en français","priority":"haute|moyenne|basse","grader":"${preferredGrader}","multiplier":3.0}]}
 Inclus seulement les cartes rentables à grader. Maximum 12 recommandations, ordonnées par priorité décroissante.`;
 
     const payload = JSON.stringify({

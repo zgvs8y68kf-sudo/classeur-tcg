@@ -183,6 +183,18 @@ nav.tabs .scan{transform:translateY(-14px)}
 nav.tabs .scan .orb{width:56px;height:56px;border-radius:50%;background:conic-gradient(from var(--ha),#ff6bb8,#ffd36e,#6bffb8,#6bb5ff,#c46bff,#ff6bb8);animation:holo 5s linear infinite;display:grid;place-items:center;box-shadow:0 4px 24px rgba(180,0,220,.5);border:3px solid var(--bg)}
 nav.tabs .scan .orb svg{width:24px;height:24px;color:#fff}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;z-index:30;font-size:14px;max-width:90%}
+/* Profil utilisateur */
+.avatar-btn{border:2px solid var(--line);background:var(--surface);border-radius:50%;width:38px;height:38px;padding:2px;overflow:hidden;flex-shrink:0;display:grid;place-items:center;cursor:pointer;transition:border-color .15s}
+.avatar-btn:hover{border-color:var(--accent)}
+.avatar-btn img{width:100%;height:100%;object-fit:contain;border-radius:50%}
+.avatar-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0 18px}
+.avatar-opt{border:2px solid transparent;background:var(--surface);border-radius:12px;padding:6px 4px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--muted);transition:border-color .15s,background .15s}
+.avatar-opt.sel{border-color:var(--accent);background:rgba(155,0,255,.09)}
+.avatar-opt img{width:56px;height:56px;object-fit:contain}
+.prof-intro{display:flex;align-items:flex-start;gap:12px;margin-bottom:18px;padding:14px 14px 12px;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.prof-intro img{width:56px;height:56px;object-fit:contain;flex-shrink:0}
+.prof-intro p{margin:0;font-size:13px;color:var(--muted);line-height:1.55}
+.prof-intro strong{color:var(--fg);font-size:14px;display:block;margin-bottom:3px}
 /* Scanner vidéo */
 #vscan-ov{position:fixed;inset:0;z-index:50;background:#000;display:flex;flex-direction:column}
 #vscan-vidwrap{flex:1;position:relative;min-height:0;overflow:hidden}
@@ -211,7 +223,8 @@ nav.tabs .scan .orb svg{width:24px;height:24px;color:#fff}
 <body>
 <header class="top wrap" style="padding-block:10px;margin-bottom:0">
   <h1 id="title">Ma collection</h1>
-  <button class="iconbtn" id="acct" data-act="acct">Connexion</button>
+  <button class="avatar-btn" id="profile-btn" data-act="openprofile" aria-label="Mon profil"><img id="profile-avatar" src="" alt="Avatar"></button>
+  <button class="iconbtn" id="acct" data-act="acct" hidden>Connexion</button>
   <div class="lang" role="group" aria-label="Langue des cartes">
     <button id="lang-fr" data-lang="fr" aria-pressed="true">FR</button>
     <button id="lang-en" data-lang="en" aria-pressed="false">EN</button>
@@ -225,7 +238,7 @@ nav.tabs .scan .orb svg{width:24px;height:24px;color:#fff}
   <button data-tab="series"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="9" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Séries</button>
   <button data-tab="scan" class="scan" aria-label="Scanner"><span class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3.2"/></svg></span></button>
   <button data-tab="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Chercher</button>
-  <button data-tab="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l2.4 4.8 5.3.8-3.85 3.75.91 5.3L12 14.1l-4.76 2.55.91-5.3L4.3 7.6l5.3-.8z"/><path d="M12 14.1v7.4" stroke-linecap="round"/></svg>Conseil</button>
+  <button data-tab="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6M10 3v7l-4 9a1 1 0 0 0 .9 1.5h10.2a1 1 0 0 0 .9-1.5L14 10V3"/><path d="M7.5 15.5h9"/></svg>Prof. Chen</button>
 </nav>
 <input type="file" id="photo-gallery" accept="image/*" multiple hidden>
 <input type="file" id="photo-page" accept="image/*" hidden>
@@ -275,6 +288,7 @@ const S = {
   priceAlerts: [],        // [{cardId,name,oldPrice,newPrice,pct,date,dismissed}]
   gradeReco: null,        // null | {loading:true} | {items:[...]} | {error:"..."}
   buyAdvice: null,        // null | {loading:true} | {items:[...]} | {error:"..."}
+  profile: { avatar: 'pikachu', displayName: '', preferredGrader: 'PSA' },
   listTab: "wish",
   openSeries: new Set(JSON.parse(lsGet("openSeries") || "[]")),
   setView: null, setFilter: "all", setCatFilter: "all",
@@ -327,6 +341,7 @@ const Store = {
   },
   loadLocal(){
     try { S.coll = JSON.parse(lsGet("coll") || "{}"); S.history = JSON.parse(lsGet("hist") || "[]"); S.cardPriceHist = JSON.parse(lsGet("ctcg_cph") || "{}"); S.priceAlerts = JSON.parse(lsGet("ctcg_alerts") || "[]"); } catch { S.coll = {}; S.history = []; S.cardPriceHist = {}; S.priceAlerts = []; }
+    try { const p = JSON.parse(lsGet("profile") || "null"); if (p) S.profile = {...S.profile, ...p}; } catch {}
     render(); autoRefreshIfStale();
   },
   async save(card){
@@ -555,10 +570,11 @@ function ownedInSet(setId){ return Object.values(S.coll).filter(d => d.setId ===
 /* ---------- rendu ---------- */
 function render(){
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === S.tab ? "page" : "false"));
-  const acct = $("#acct"); if (acct) { acct.hidden = !window.FIREBASE_CONFIG?.apiKey; acct.textContent = S.user ? "Déconnexion" : "Connexion"; acct.title = S.user ? (S.user.email || "") : "Se connecter avec Google pour synchroniser"; }
+  const acct = $("#acct"); if (acct) acct.hidden = true;
+  const pavt = $("#profile-avatar"); if (pavt) pavt.src = avatarUrl(S.profile.avatar);
   document.querySelectorAll(".lang button").forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === S.lang));
   const app = $("#app");
-  const titles = {home:"Ma collection", series:"Séries", scan:"Scanner", search:"Chercher", lists:"Listes", set: S.setView ? (S.catalog?.sets?.[S.setView]?.name || "Extension") : ""};
+  const titles = {home:"Ma collection", series:"Séries", scan:"Scanner", search:"Chercher", lists:"Prof. Chen", set: S.setView ? (S.catalog?.sets?.[S.setView]?.name || "Extension") : ""};
   $("#title").textContent = titles[S.tab];
   if (S.tab === "home") app.innerHTML = viewHome();
   else if (S.tab === "series") app.innerHTML = viewSeries();
@@ -772,6 +788,19 @@ const RINFO = { // [label FR, ordre]
   "rare legend":               ["LÉGENDE ★★",      7],
 };
 const normStr = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
+const AVATARS = [
+  {key:"pikachu",name:"Pikachu",id:25},{key:"charizard",name:"Dracaufeu",id:6},
+  {key:"mewtwo",name:"Mewtwo",id:150},{key:"eevee",name:"Évoli",id:133},
+  {key:"gengar",name:"Ectoplasma",id:94},{key:"snorlax",name:"Ronflex",id:143},
+  {key:"mew",name:"Mew",id:151},{key:"lucario",name:"Lucario",id:448},
+  {key:"greninja",name:"Amphinobi",id:658},{key:"sylveon",name:"Nymphali",id:700},
+  {key:"gardevoir",name:"Gardevoir",id:282},{key:"umbreon",name:"Noctali",id:197},
+  {key:"bulbasaur",name:"Bulbizarre",id:1},{key:"squirtle",name:"Carapuce",id:7},
+  {key:"charmander",name:"Salamèche",id:4},{key:"jigglypuff",name:"Rondoudou",id:39},
+];
+const GRADERS = ["PSA","PCA","BGS","CGC","Beckett"];
+function avatarUrl(key){ const a = AVATARS.find(x=>x.key===key)||AVATARS[0]; return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${a.id}.png`; }
+function saveProfile(){ lsSet("profile", JSON.stringify(S.profile)); }
 function matchCat(c, cf){
   if (cf === "all") return true;
   const cat = normStr(c.category);
@@ -935,12 +964,17 @@ function viewLists(){
     : `<p class="muted" style="font-size:13px">Aucune hausse détectée pour le moment. Les alertes apparaissent ici quand une carte de ta collection prend ≥ 25 % en un jour.</p>`;
 
   /* ── 2. Grading ── */
+  const pg = S.profile.preferredGrader || "PSA";
+  const graderCosts = {"PSA":"~35 €","PCA":"~15 €","BGS":"~30 €","CGC":"~25 €","Beckett":"~30 €"};
   const rg = S.gradeReco;
-  const gradingBtn = `<button class="btn primary" data-act="analyzegrade" style="font-size:13px;margin-bottom:10px">✨ Analyser ma collection</button>`;
+  const gradingBtn = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <button class="btn primary" data-act="analyzegrade" style="font-size:13px">✨ Analyser ma collection</button>
+    <span style="font-size:12px;color:var(--muted)">Gradeur préféré : <b style="color:var(--fg)">${esc(pg)}</b> (${graderCosts[pg]||"~30 €"}) — <button class="btn" data-act="openprofile" style="font-size:11px;padding:4px 10px">Changer</button></span>
+  </div>`;
   const gradingHtml = rg?.loading ? `${gradingBtn}<p class="muted"><span class="spinner"></span> Analyse en cours…</p>`
     : rg?.error ? `${gradingBtn}<div class="note" style="font-size:13px">Erreur : ${esc(rg.error)}${rg.error==="no_key"?" — configure GEMINI_API_KEY sur Vercel.":""}</div>`
-    : rg?.items?.length ? gradingBtn + _aiItemList(rg.items.map(x=>({...x, badge:(x.grader||"PSA")+(x.value?" · "+eur(x.value):""), right:x.multiplier?`×${x.multiplier}`:""})), cols)
-    : `${gradingBtn}<p class="muted" style="font-size:13px">${rg ? "Aucune carte intéressante à grader trouvée." : "Lance l'analyse pour savoir quelles cartes valent le coup d'être gradées (coût ~35 € PSA, ~15 € PCA)."}</p>`;
+    : rg?.items?.length ? gradingBtn + _aiItemList(rg.items.map(x=>({...x, badge:(x.grader||pg)+(x.value?" · "+eur(x.value):""), right:x.multiplier?`×${x.multiplier}`:""})), cols)
+    : `${gradingBtn}<p class="muted" style="font-size:13px">${rg ? "Aucune carte intéressante à grader trouvée." : `Lance l'analyse pour savoir quelles cartes valent le coup d'être gradées avec ${pg} (${graderCosts[pg]||"~30 €"}).`}</p>`;
 
   /* ── 3. Conseils d'achat ── */
   const rb = S.buyAdvice;
@@ -950,10 +984,84 @@ function viewLists(){
     : rb?.items?.length ? buyBtn + _aiItemList(rb.items.map(x=>({...x, badge:x.setName||"", right:x.estValue?eur(x.estValue):""})), cols)
     : `${buyBtn}<p class="muted" style="font-size:13px">${rb ? "Aucune suggestion pour le moment." : "Gemini analyse tes extensions incomplètes et te recommande les cartes manquantes à fort potentiel."}</p>`;
 
-  return `<h2 style="font-size:17px;font-weight:700;margin:0 0 18px;display:flex;align-items:center;gap:7px">✨ Conseiller IA</h2>
-    ${_aiSection("Alertes de valeur", "📈", alertsHtml)}
-    ${_aiSection("Cartes à grader", "🎓", gradingHtml)}
-    ${_aiSection("Cartes à acquérir", "🛒", buyHtml)}`;
+  return `<div class="prof-intro">
+    <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/101.png" alt="Prof. Chen" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23888%22 stroke-width=%222%22><circle cx=%2212%22 cy=%228%22 r=%224%22/><path d=%22M4 20c0-4 3.6-7 8-7s8 3 8 7%22/></svg>'">
+    <p><strong>Professeur Chen</strong>Bienvenue, Dresseur ! Je suis là pour t'aider à valoriser ta collection. Découvre les cartes à grader, celles à acquérir, et surveille les hausses de prix.</p>
+  </div>
+  ${_aiSection("Alertes de valeur", "📈", alertsHtml)}
+  ${_aiSection("Cartes à grader", "🎓", gradingHtml)}
+  ${_aiSection("Cartes à acquérir", "🛒", buyHtml)}`;
+}
+
+function openProfile(){
+  const scrim = document.createElement("div"); scrim.className = "scrim";
+  const user = S.user;
+  const hasFirebase = !!window.FIREBASE_CONFIG?.apiKey;
+
+  const renderModal = () => {
+    const p = S.profile;
+    scrim.innerHTML = `<div class="sheet" style="max-height:90%;overflow-y:auto">
+      <div class="sheet-header"><button class="sheet-close" id="prof-close">✕</button></div>
+      <h2 style="margin:0 0 16px;font-size:16px;font-weight:700">Mon profil</h2>
+
+      <h3 style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:0 0 8px">Avatar</h3>
+      <div class="avatar-grid">
+        ${AVATARS.map(a=>`<button class="avatar-opt${p.avatar===a.key?' sel':''}" data-setavatar="${a.key}">
+          <img src="${avatarUrl(a.key)}" alt="${esc(a.name)}" loading="lazy" onerror="this.style.opacity='.3'">
+          <span>${esc(a.name)}</span>
+        </button>`).join("")}
+      </div>
+
+      <h3 style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:0 0 8px">Préférences</h3>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+        <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+          Pseudo
+          <input id="prof-name" type="text" value="${esc(p.displayName)}" placeholder="Ton nom de dresseur…"
+            style="border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:9px 12px;font-size:15px;color:var(--fg)">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+          Société de grading préférée
+          <select id="prof-grader" style="border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:9px 12px;font-size:15px;color:var(--fg)">
+            ${GRADERS.map(g=>`<option value="${g}"${p.preferredGrader===g?' selected':''}>${g}</option>`).join("")}
+          </select>
+          <span style="font-size:11px;color:var(--muted)">L'analyse IA recommandera en priorité ce gradeur.</span>
+        </label>
+      </div>
+
+      ${hasFirebase ? `<h3 style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:0 0 8px">Compte</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
+        ${user ? `<p style="font-size:13px;margin:0">Connecté en tant que <b>${esc(user.email||user.displayName||"Dresseur")}</b></p>
+          <button class="btn" data-act="acct" style="font-size:13px;color:#ef4444;border-color:#ef4444">Se déconnecter</button>`
+          : `<p style="font-size:13px;color:var(--muted);margin:0">Connecte-toi avec Google pour synchroniser ta collection sur tous tes appareils.</p>
+          <button class="btn primary" data-act="acct" style="font-size:13px">Se connecter avec Google</button>`}
+      </div>` : ""}
+
+      <button class="btn primary" id="prof-save" style="width:100%;margin-top:4px">Enregistrer</button>
+    </div>`;
+
+    scrim.querySelector("#prof-close").onclick = () => scrim.remove();
+    scrim.querySelector("#prof-save").onclick = () => {
+      S.profile.displayName = scrim.querySelector("#prof-name").value.trim();
+      S.profile.preferredGrader = scrim.querySelector("#prof-grader").value;
+      saveProfile(); scrim.remove(); render();
+    };
+    scrim.querySelectorAll("[data-setavatar]").forEach(btn => {
+      btn.onclick = () => {
+        S.profile.avatar = btn.dataset.setavatar;
+        saveProfile();
+        const pavt = document.getElementById("profile-avatar"); if (pavt) pavt.src = avatarUrl(S.profile.avatar);
+        scrim.querySelectorAll(".avatar-opt").forEach(b => b.classList.toggle("sel", b.dataset.setavatar === S.profile.avatar));
+      };
+    });
+    scrim.querySelectorAll("[data-act='acct']").forEach(b => b.onclick = () => { scrim.remove(); S.user ? Store.signOut() : Store.signIn(); });
+    scrim.addEventListener("click", e => { if (e.target === scrim) scrim.remove(); });
+  };
+
+  renderModal();
+  document.body.appendChild(scrim);
+  const sh = scrim.querySelector(".sheet");
+  sh.style.transform = "translateY(60px)"; sh.style.opacity = "0"; sh.style.transition = "none";
+  requestAnimationFrame(() => requestAnimationFrame(() => { sh.style.transition = "transform .3s cubic-bezier(.34,1.56,.64,1), opacity .2s"; sh.style.transform = ""; sh.style.opacity = ""; }));
 }
 
 async function analyzeForGrading(){
@@ -974,7 +1082,7 @@ async function analyzeForGrading(){
     const res = await fetch("/api/grade-analysis", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cards: candidates })
+      body: JSON.stringify({ cards: candidates, preferredGrader: S.profile.preferredGrader || "PSA" })
     });
     const data = await res.json();
     if (!res.ok) { S.gradeReco = { error: data.error || "Erreur serveur" }; }
@@ -2036,6 +2144,7 @@ document.addEventListener("click", e => {
     return;
   }
   const act = b.dataset.act;
+  if (act === "openprofile") { openProfile(); return; }
   if (act === "acct") return S.user ? Store.signOut() : Store.signIn();
   if (act === "scan") return go("scan");
   if (act === "startvideo") return startVideoScan();
