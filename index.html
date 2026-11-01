@@ -421,19 +421,30 @@ async function loadSet(id){
   const k = S.lang + ":" + id;
   if (S.setCache[k]) return S.setCache[k];
   let d;
-  try { d = await j(`${API}/${S.lang}/sets/${encodeURIComponent(id)}`); } catch {}
-  // Fallback EN si FR n'a pas de cartes OU si FR est incomplet (énergies, promos manquantes)
-  const frTotal = d?.cardCount?.total || d?.cardCount?.official || 0;
-  const frHasAll = d?.cards?.length && (!frTotal || d.cards.length >= frTotal);
-  if ((!frHasAll) && S.lang !== "en") {
-    try {
-      const en = await j(`${API}/en/sets/${encodeURIComponent(id)}`);
-      // Garder le set EN seulement s'il a plus de cartes
-      if ((en?.cards?.length || 0) > (d?.cards?.length || 0)) d = en;
-    } catch {}
+  if (S.lang === "en") {
+    try { d = await j(`${API}/en/sets/${encodeURIComponent(id)}`); } catch {}
+  } else {
+    // Fetch FR et EN en parallèle — utilise celui qui a le plus de cartes
+    const [rFr, rEn] = await Promise.allSettled([
+      j(`${API}/${S.lang}/sets/${encodeURIComponent(id)}`),
+      j(`${API}/en/sets/${encodeURIComponent(id)}`)
+    ]);
+    const dFr = rFr.status === "fulfilled" ? rFr.value : null;
+    const dEn = rEn.status === "fulfilled" ? rEn.value : null;
+    d = (dEn?.cards?.length || 0) > (dFr?.cards?.length || 0) ? dEn : (dFr || dEn);
   }
   if (!d) throw new Error("Set introuvable");
   d.cards = (d.cards || []).slice().sort((a,b) => natCmp(a.localId, b.localId));
+  // Enrichir avec category/rarity si absents des résumés (TCGdex CardBrief n'inclut pas ces champs)
+  if (!d.cards.some(c => c.category)) {
+    try {
+      const cats = await j(`${API}/en/cards?set.id=${encodeURIComponent(id)}`);
+      if (Array.isArray(cats) && cats.length && cats[0].category) {
+        const byId = new Map(cats.map(c => [c.id, {category: c.category, rarity: c.rarity}]));
+        d.cards.forEach(c => { const x = byId.get(c.id); if (x) { c.category = x.category; c.rarity = x.rarity; } });
+      }
+    } catch {}
+  }
   return S.setCache[k] = d;
 }
 function natCmp(a,b){ const na = parseInt(a,10), nb = parseInt(b,10); if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb; return String(a).localeCompare(String(b), "fr", {numeric:true}); }
@@ -608,15 +619,20 @@ function setTile(x){
 
 function matchCat(c, cf){
   if (cf === "all") return true;
-  const cat = (c.category || "").toLowerCase();
-  const rar = (c.rarity || "").toLowerCase();
-  const isRare = rar.startsWith("rare") || ["holo","ultra","secret","amazing","radiant","illustration","full art","special","hyper"].some(w => rar.includes(w));
-  const isPromo = rar.includes("promo");
-  if (cf === "energy")  return cat === "energy";
-  if (cf === "trainer") return cat === "trainer";
+  // Normalise accents (FR: "Énergie"→"energie", "Dresseur"→"dresseur", "Pokémon"→"pokemon")
+  const norm = s => (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  const cat = norm(c.category);
+  const rar = norm(c.rarity);
+  const isEnergy  = cat === "energy" || cat === "energie";
+  const isTrainer = cat === "trainer" || cat === "dresseur";
+  const isRare    = rar.startsWith("rare") ||
+    ["holo","ultra","secret","amazing","radiant","illustration","full art","special","hyper","prism","shiny"].some(w => rar.includes(w));
+  const isPromo   = rar.includes("promo");
+  if (cf === "energy")  return isEnergy;
+  if (cf === "trainer") return isTrainer;
   if (cf === "promo")   return isPromo;
-  if (cf === "rare")    return cat === "pokemon" && isRare && !isPromo;
-  if (cf === "normal")  return cat === "pokemon" && !isRare && !isPromo;
+  if (cf === "rare")    return !isEnergy && !isTrainer && isRare && !isPromo;
+  if (cf === "normal")  return !isEnergy && !isTrainer && !isRare && !isPromo;
   return true;
 }
 async function viewSet(app){
