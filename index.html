@@ -128,7 +128,9 @@ h2{font:400 14px/1 var(--display);letter-spacing:.22em;text-transform:uppercase;
 .scrim{position:fixed;inset:0;background:rgba(5,8,14,.55);z-index:20;display:flex;align-items:flex-end;justify-content:center}
 .sheet{background:var(--bg);width:100%;max-width:640px;max-height:92%;overflow:auto;border-radius:18px 18px 0 0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
 @media (min-width:700px){.scrim{align-items:center}.sheet{border-radius:18px;max-height:88%}}
-.sheet .grab{width:40px;height:4px;border-radius:9px;background:var(--line);margin:0 auto 12px}
+.sheet .grab{width:48px;height:5px;border-radius:9px;background:var(--muted);opacity:.5;margin:0 auto 14px;cursor:grab}
+.sheet-header{display:flex;align-items:center;justify-content:flex-end;margin:-4px 0 10px}
+.sheet-close{border:0;background:rgba(255,255,255,.1);border-radius:50%;width:32px;height:32px;font-size:18px;line-height:1;display:grid;place-items:center;color:var(--fg)}
 .detail{display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:16px}
 @media (max-width:520px){.detail{grid-template-columns:1fr}.detail .big{max-width:240px;margin:0 auto}}
 .big{width:100%;border-radius:12px;display:block;box-shadow:0 8px 24px rgba(0,0,0,.25)}
@@ -670,6 +672,7 @@ async function openCard(id){
   const paint = () => {
     const q = qty(doc);
     $(".sheet", scrim).innerHTML = `<div class="grab"></div>
+    <div class="sheet-header"><button class="sheet-close" id="closebtn" aria-label="Fermer">✕</button></div>
     <div class="detail">
       <img class="big" src="${esc(c.image ? c.image + "/high.webp" : "/_")}" data-set="${esc(c.setId||doc.setId)}" data-local="${esc(c.localId||doc.localId)}" alt="${esc(c.name)}" onerror="imgFb(this)">
       <div style="min-width:0">
@@ -723,9 +726,14 @@ async function openCard(id){
     if (t.dataset.inc || t.dataset.dec) { const k = t.dataset.inc || t.dataset.dec; doc.v = {...doc.v, [k]: Math.max(0, (doc.v?.[k]||0) + (t.dataset.inc ? 1 : -1))}; commit(); paint(); }
     else if (t.id === "wishbtn") { doc.wish = !doc.wish; commit(); paint(); }
     else if (t.id === "delbtn") { Store.remove(id); close(); toast("Retirée"); }
-    else if (t.id === "okbtn") { commit(); close(); }
+    else if (t.id === "okbtn" || t.id === "closebtn") { commit(); close(); }
   });
   scrim.addEventListener("change", () => { commit(); });
+  // Swipe vers le bas pour fermer
+  const sheet = scrim.querySelector(".sheet");
+  let _ty0 = 0, _tScroll = 0;
+  sheet.addEventListener("touchstart", e => { _ty0 = e.touches[0].clientY; _tScroll = sheet.scrollTop; }, {passive:true});
+  sheet.addEventListener("touchend", e => { if (_tScroll === 0 && e.changedTouches[0].clientY - _ty0 > 70) close(); });
 }
 
 /* ---------- scan ---------- */
