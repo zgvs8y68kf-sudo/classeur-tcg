@@ -247,6 +247,10 @@ nav.tabs .scan .orb svg{width:24px;height:24px;color:#fff}
 .prof-intro img{width:56px;height:56px;object-fit:contain;flex-shrink:0}
 .prof-intro p{margin:0;font-size:13px;color:var(--muted);line-height:1.55}
 .prof-intro strong{color:var(--fg);font-size:14px;display:block;margin-bottom:3px}
+/* Sélecteur énergie deck */
+.deck-energy-picker{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+.deck-e-chip{border:1px solid var(--line);border-radius:20px;padding:5px 11px;font-size:12px;cursor:pointer;background:var(--surface);color:var(--fg);transition:background .15s,color .15s}
+.deck-e-chip.sel{background:var(--accent);color:#fff;border-color:var(--accent)}
 /* Cotes gradées référence */
 .grade-ref{margin:6px 0 10px}
 .gref-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
@@ -351,6 +355,7 @@ const S = {
   profile: { avatar: 'pikachu', displayName: '', preferredGrader: 'PSA', player2: 'Joueur 2', deckThreshold: 2 },
   decks: {},
   deckAdvice: null,
+  deckEnergyFilter: [],
   energyStock: {},
   battleState: null,
   listTab: "wish",
@@ -409,6 +414,7 @@ const Store = {
     try { S.decks = JSON.parse(lsGet("decks") || "{}"); } catch { S.decks = {}; }
     try { const def = Object.fromEntries(ENERGY_TYPES.map(e=>[e.k,20])); const saved = JSON.parse(lsGet("energy")||"null"); S.energyStock = saved ? {...def,...saved} : def; } catch { S.energyStock = Object.fromEntries(ENERGY_TYPES.map(e=>[e.k,20])); }
     try { S.battleState = JSON.parse(lsGet("battle") || "null"); } catch { S.battleState = null; }
+    try { S.deckEnergyFilter = JSON.parse(lsGet("deckEF") || "[]"); } catch { S.deckEnergyFilter = []; }
     render(); autoRefreshIfStale();
   },
   async save(card){
@@ -1029,6 +1035,7 @@ function hpColor(pct){ return pct > .5 ? "#22c55e" : pct > .25 ? "#f59e0b" : "#e
 
 function saveDeckState(){ lsSet("decks", JSON.stringify(S.decks)); }
 function saveEnergyState(){ lsSet("energy", JSON.stringify(S.energyStock)); }
+function saveDeckEnergyFilter(){ lsSet("deckEF", JSON.stringify(S.deckEnergyFilter)); }
 function saveBattleState(){ if (S.battleState) lsSet("battle", JSON.stringify(S.battleState)); else { try { localStorage.removeItem("ctcg_battle"); } catch {} } }
 
 function battleLog(msg){ if (!S.battleState) return; S.battleState.log.unshift({t:S.battleState.turn, msg}); if (S.battleState.log.length>30) S.battleState.log.pop(); }
@@ -1223,7 +1230,7 @@ async function generateDecks(){
   try {
     const res = await fetch("/api/deck-builder", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({cards, energy})
+      body: JSON.stringify({cards, energy, preferredTypes: S.deckEnergyFilter})
     });
     const data = await res.json();
     if (!res.ok) S.deckAdvice={error:data.error||"Erreur serveur"};
@@ -1285,26 +1292,52 @@ function viewDecks(){
       </div>`).join("")}</div>`
     : `<p class="muted" style="font-size:13px;margin-bottom:16px">Aucun deck sauvegardé. Génère-en un avec l'IA ci-dessous !</p>`;
 
+  const ef = S.deckEnergyFilter;
+  const energyPickerHtml = `<div style="margin-bottom:14px">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">🎯 Types d'énergie (0, 1 ou 2 types) — Gemini construira le deck autour de ces types :</div>
+    <div class="deck-energy-picker">
+      ${ENERGY_TYPES.map(e=>`<button class="deck-e-chip${ef.includes(e.k)?' sel':''}" data-act="toggledeckenergy" data-etype="${e.k}">${e.i} ${e.k}</button>`).join("")}
+    </div>
+    ${ef.length?`<small style="color:var(--accent);font-size:11px">Sélectionné : ${ef.join(" + ")}</small>`:`<small class="muted" style="font-size:11px">Aucun filtre — Gemini choisit les meilleurs types selon ta collection</small>`}
+  </div>`;
+
   const aiHtml = da?.loading
-    ? `<p class="muted"><span class="spinner"></span> Gemini analyse ta collection…</p>`
+    ? `<p class="muted"><span class="spinner"></span> Gemini analyse ta collection… (peut prendre 20 s)</p>`
     : da?.error
     ? `<div class="note" style="font-size:13px">Erreur : ${esc(da.error)}</div>`
     : da?.decks?.length
-    ? `<div style="display:flex;flex-direction:column;gap:14px">${da.decks.map((d,i)=>`<div class="deck-card">
-        <h3>✨ ${esc(d.name)}</h3>
-        <p class="dstrat">${esc(d.strategy)}</p>
-        ${d.cards?.length?`<details style="margin-top:4px"><summary style="font-size:12px;cursor:pointer;color:var(--accent)">Voir la liste (${d.cards.length} cartes)</summary>
-          <div style="margin-top:8px;font-size:12px;display:flex;flex-direction:column;gap:3px">
-            ${d.cards.map(c=>`<span>${c.qty}× ${esc(c.name)}</span>`).join("")}
-          </div></details>`:``}
-        ${d.missingCards?.length?`<details style="margin-top:4px"><summary style="font-size:12px;cursor:pointer;color:#f59e0b">⚠️ ${d.missingCards.length} carte(s) manquante(s)</summary>
-          <div style="margin-top:8px;font-size:12px;display:flex;flex-direction:column;gap:3px">
-            ${d.missingCards.map(c=>`<span>• ${c.qty}× ${esc(c.name)} — <span style="color:var(--muted)">${esc(c.reason||"")}</span></span>`).join("")}
-          </div></details>`:``}
-        <div class="dactions" style="margin-top:6px">
-          <button class="btn primary" data-act="savedeck" data-didx="${i}" style="font-size:12px">💾 Sauvegarder ce deck</button>
-        </div>
-      </div>`).join("")}</div>`
+    ? `<div style="display:flex;flex-direction:column;gap:10px">${da.decks.map((d,i)=>{
+        const missCrit = d.missingCards?.filter(c=>c.critical);
+        const missOk = d.missingCards?.filter(c=>!c.critical);
+        const ownedPoke = d.cards?.filter(c=>c.owned && c.isPokemon).length || 0;
+        const totalCards = (d.cards||[]).reduce((s,c)=>s+c.qty,0) + (d.energy||[]).reduce((s,e)=>s+e.qty,0);
+        return `<details class="deck-card" style="cursor:pointer">
+          <summary style="list-style:none;display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:14px;margin-bottom:2px">#${i+1} ${esc(d.name)}</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:4px">${esc(d.strategy)}</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                ${d.energy?.map(e=>`<span style="font-size:11px;background:var(--sunk);border-radius:10px;padding:2px 8px">${ENERGY_TYPES.find(t=>t.k===e.type)?.i||"⚡"} ${e.qty}</span>`).join("")||""}
+                <span style="font-size:11px;background:var(--sunk);border-radius:10px;padding:2px 8px">🃏 ${totalCards}/60</span>
+                ${d.missingCards?.length?`<span style="font-size:11px;background:#fef3c7;color:#92400e;border-radius:10px;padding:2px 8px">⚠️ ${d.missingCards.length} manquante(s)</span>`:`<span style="font-size:11px;background:#d1fae5;color:#065f46;border-radius:10px;padding:2px 8px">✅ 100% possédé</span>`}
+              </div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;margin-top:3px"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+            ${d.cards?.length?`<details style="margin-bottom:8px"><summary style="font-size:12px;cursor:pointer;color:var(--accent)">📋 Liste des cartes possédées (${d.cards.filter(c=>c.owned).length} types)</summary>
+              <div style="margin-top:6px;font-size:12px;display:flex;flex-direction:column;gap:2px;max-height:180px;overflow-y:auto">
+                ${d.cards.filter(c=>c.owned).map(c=>`<span>${c.qty}× ${esc(c.name)}</span>`).join("")}
+              </div></details>`:""}
+            ${d.energy?.length?`<div style="font-size:12px;margin-bottom:8px;color:var(--muted)">Énergies : ${d.energy.map(e=>`${ENERGY_TYPES.find(t=>t.k===e.type)?.i||"⚡"} ${e.type} ×${e.qty}`).join(", ")}</div>`:""}
+            ${d.missingCards?.length?`<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:8px 10px;margin-bottom:8px">
+              <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:4px">⚠️ À se procurer :</div>
+              ${d.missingCards.map(c=>`<div style="font-size:12px;margin-bottom:3px">• ${c.qty}× <b>${esc(c.name)}</b>${c.setName?` (${esc(c.setName)})`:""} <span style="color:var(--muted)">— ${esc(c.reason||"")}</span></div>`).join("")}
+            </div>`:""}
+            <button class="btn primary" data-act="savedeck" data-didx="${i}" style="font-size:12px;width:100%">💾 Sauvegarder ce deck</button>
+          </div>
+        </details>`;
+      }).join("")}</div>`
     : ``;
 
   return `${energyHtml}
@@ -1313,7 +1346,8 @@ function viewDecks(){
     <button class="btn" data-act="newdeck" style="font-size:12px">+ Nouveau deck</button>
   </h2>
   ${decksHtml}
-  <h2 style="margin:18px 0 8px">✨ Decks suggérés par l'IA</h2>
+  <h2 style="margin:18px 0 8px">✨ Decks suggérés par Gemini</h2>
+  ${energyPickerHtml}
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
     <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px">
       Exclure les cartes &gt;
@@ -1321,10 +1355,10 @@ function viewDecks(){
         style="width:58px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:7px;padding:4px 7px;font-size:13px;text-align:right">
       €
     </label>
-    <small class="muted" style="font-size:11px">(si en double, 1 copie reste utilisable)</small>
-    <button class="btn primary" data-act="gendecks" style="font-size:12px;margin-left:auto">✨ Générer</button>
+    <small class="muted" style="font-size:11px">(si en double, 1 copie jouable)</small>
+    <button class="btn primary" data-act="gendecks" style="font-size:12px;margin-left:auto">✨ Générer 10 decks</button>
   </div>
-  ${aiHtml || `<p class="muted" style="font-size:13px">Clique sur "Générer" pour que Gemini compose des decks depuis ta collection.</p>`}`;
+  ${aiHtml || `<p class="muted" style="font-size:13px">Clique sur "Générer 10 decks" — Gemini compose les meilleures options depuis tes cartes possédées.</p>`}`;
 }
 
 /* ── VIEW : Battle assistant ───────────────────────────── */
@@ -2617,6 +2651,7 @@ document.addEventListener("click", e => {
   const act = b.dataset.act;
   if (act === "openprofile") { openProfile(); return; }
   if (act === "gendecks") { generateDecks(); return; }
+  if (act === "toggledeckenergy") { const k=b.dataset.etype, i=S.deckEnergyFilter.indexOf(k); if(i>=0) S.deckEnergyFilter.splice(i,1); else if(S.deckEnergyFilter.length<2) S.deckEnergyFilter.push(k); saveDeckEnergyFilter(); render(); return; }
   if (act === "savedeck") { saveDeckFromAdvice(parseInt(b.dataset.didx||"0")); return; }
   if (act === "deldeck") { deleteDeck(b.dataset.deckid); return; }
   if (act === "startbattle") { openBattleSetup(b.dataset.deckid||""); return; }
