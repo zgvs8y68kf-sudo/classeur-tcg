@@ -984,7 +984,7 @@ async function analyzeForGrading(){
 }
 
 /* ---------- fiche carte ---------- */
-async function openCard(id, deck=[]){
+async function openCard(id, deck=[], dir=null){
   const scrim = document.createElement("div"); scrim.className = "scrim";
   scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="Fiche carte"><div class="grab"></div><p class="muted"><span class="spinner"></span> Chargement…</p></div>`;
   document.body.appendChild(scrim);
@@ -1092,13 +1092,27 @@ async function openCard(id, deck=[]){
   const idx = deck.indexOf(id);
   const prevId = idx > 0 ? deck[idx-1] : null;
   const nextId = idx >= 0 && idx < deck.length-1 ? deck[idx+1] : null;
-  const goTo = nid => { commit(); scrim.remove(); document.removeEventListener("keydown", _onKey); openCard(nid, deck); };
+  const hasnav = deck.length > 1 && (prevId || nextId);
+  const W = () => window.innerWidth;
+
+  // outDir : direction vers laquelle la carte courante sort ('left' | 'right')
+  // fromDrag : true si appelé depuis touchend (sheet déjà déplacée)
+  const goTo = (nid, outDir, fromDrag=false) => {
+    commit();
+    document.removeEventListener("keydown", _onKey);
+    const sh = scrim.querySelector(".sheet");
+    const dur = fromDrag ? 0.15 : 0.22;
+    sh.style.transition = `transform ${dur}s cubic-bezier(0.55,0,1,0.45), opacity ${dur}s`;
+    sh.style.transform = `translateX(${outDir === 'left' ? -W()*1.1 : W()*1.1}px)`;
+    sh.style.opacity = '0';
+    setTimeout(() => { scrim.remove(); openCard(nid, deck, outDir === 'left' ? 'right' : 'left'); }, dur*1000 + 10);
+  };
   const _onKey = e => {
-    if (e.key === "ArrowLeft" && prevId) { e.preventDefault(); goTo(prevId); }
-    else if (e.key === "ArrowRight" && nextId) { e.preventDefault(); goTo(nextId); }
+    if (e.key === "ArrowLeft"  && prevId) { e.preventDefault(); goTo(prevId, 'right'); }
+    else if (e.key === "ArrowRight" && nextId) { e.preventDefault(); goTo(nextId, 'left'); }
     else if (e.key === "Escape") close();
   };
-  if (deck.length > 1) document.addEventListener("keydown", _onKey);
+  if (hasnav) document.addEventListener("keydown", _onKey);
 
   const origPaint = paint;
   const paintWithNav = () => {
@@ -1110,10 +1124,21 @@ async function openCard(id, deck=[]){
   };
   paintWithNav();
 
+  // Animation d'entrée depuis le côté opposé
+  if (dir) {
+    const sh = scrim.querySelector(".sheet");
+    sh.style.transform = `translateX(${dir === 'right' ? W() : -W()}px)`;
+    sh.style.transition = 'none';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      sh.style.transition = 'transform 0.28s cubic-bezier(0.25,0.46,0.45,0.94)';
+      sh.style.transform = 'translateX(0)';
+    }));
+  }
+
   scrim.addEventListener("click", e => {
     const t = e.target.closest("button"); if (!t) return;
-    if (t.id === "prevbtn") return goTo(prevId);
-    if (t.id === "nextbtn") return goTo(nextId);
+    if (t.id === "prevbtn") return goTo(prevId, 'right');
+    if (t.id === "nextbtn") return goTo(nextId, 'left');
     if (t.dataset.inc || t.dataset.dec) { const k = t.dataset.inc || t.dataset.dec; doc.v = {...doc.v, [k]: Math.max(0, (doc.v?.[k]||0) + (t.dataset.inc ? 1 : -1))}; commit(); paintWithNav(); }
     else if (t.id === "wishbtn") { doc.wish = !doc.wish; commit(); paintWithNav(); }
     else if (t.id === "delbtn") { Store.remove(id); close(); toast("Retirée"); }
@@ -1129,17 +1154,44 @@ async function openCard(id, deck=[]){
     }
     commit();
   });
-  // Swipe vers le bas pour fermer, gauche/droite pour naviguer
+
+  // Swipe physique : suit le doigt en temps réel
   const sheet = scrim.querySelector(".sheet");
-  let _tx0 = 0, _ty0 = 0, _tScroll = 0;
-  sheet.addEventListener("touchstart", e => { _tx0 = e.touches[0].clientX; _ty0 = e.touches[0].clientY; _tScroll = sheet.scrollTop; }, {passive:true});
+  let _tx0 = 0, _ty0 = 0, _tScroll = 0, _dragging = false;
+  sheet.addEventListener("touchstart", e => {
+    _tx0 = e.touches[0].clientX; _ty0 = e.touches[0].clientY;
+    _tScroll = sheet.scrollTop; _dragging = false;
+    sheet.style.transition = 'none';
+  }, {passive:true});
+  sheet.addEventListener("touchmove", e => {
+    const dx = e.touches[0].clientX - _tx0;
+    const dy = e.touches[0].clientY - _ty0;
+    if (!_dragging) {
+      if (Math.abs(dy) > Math.abs(dx) + 4) return; // scroll vertical prioritaire
+      if (Math.abs(dx) > 8) _dragging = true; else return;
+    }
+    if (!hasnav) return;
+    e.preventDefault();
+    // Résistance au bord si pas de carte dans cette direction
+    const resist = dx > 0 ? (prevId ? 1 : 0.1) : (nextId ? 1 : 0.1);
+    sheet.style.transform = `translateX(${dx * resist}px)`;
+    sheet.style.opacity = String(Math.max(0.7, 1 - Math.abs(dx) / W() * 0.6));
+  }, {passive:false});
   sheet.addEventListener("touchend", e => {
     const dx = e.changedTouches[0].clientX - _tx0;
     const dy = e.changedTouches[0].clientY - _ty0;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 0 && prevId) goTo(prevId);
-      else if (dx < 0 && nextId) goTo(nextId);
-    } else if (_tScroll === 0 && dy > 70) close();
+    sheet.style.opacity = '';
+    if (_dragging && hasnav) {
+      const threshold = Math.min(110, W() * 0.3);
+      if (dx >  threshold && prevId) { goTo(prevId, 'right', true); return; }
+      if (dx < -threshold && nextId) { goTo(nextId, 'left',  true); return; }
+      // Retour élastique si seuil non atteint
+      sheet.style.transition = 'transform 0.38s cubic-bezier(0.34,1.56,0.64,1)';
+      sheet.style.transform = 'translateX(0)';
+    } else if (!_dragging && _tScroll === 0 && dy > 70) {
+      close();
+    }
+    _dragging = false;
   });
 }
 
