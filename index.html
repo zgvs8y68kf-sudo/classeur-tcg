@@ -906,12 +906,12 @@ function viewLists(){
               L==="dup"  ? dup.reduce((s,d)=>s+(cardValue(d)||0)/qty(d)*(qty(d)-1),0) :
               L==="graded" ? graded.reduce((s,d)=>s+(cardValue(d)||0),0) : 0;
   const label = {wish:"Coût estimé",dup:"Valeur des doubles",graded:"Valeur des cartes gradées"}[L]||"";
-  const chips = `<div class="chips" role="group" style="margin-bottom:12px">
-    <button class="chip" data-list="wish"    aria-pressed="${L==="wish"}">♥ Souhaits (${wish.length})</button>
-    <button class="chip" data-list="dup"     aria-pressed="${L==="dup"}">Doubles (${dup.length})</button>
-    <button class="chip" data-list="pending" aria-pressed="${L==="pending"}">⏳ En cours (${pending.length})</button>
-    <button class="chip" data-list="graded"  aria-pressed="${L==="graded"}">🏅 Gradées (${graded.length})</button>
-    <button class="chip" data-list="reco"    aria-pressed="${L==="reco"}">✨ IA</button></div>`;
+  const chips = `<div class="chips" role="group" style="margin-bottom:12px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px">
+    <button class="chip" data-list="wish"    aria-pressed="${L==="wish"}" style="white-space:nowrap">♥ Souhaits (${wish.length})</button>
+    <button class="chip" data-list="dup"     aria-pressed="${L==="dup"}" style="white-space:nowrap">Doubles (${dup.length})</button>
+    <button class="chip" data-list="pending" aria-pressed="${L==="pending"}" style="white-space:nowrap">⏳ En cours (${pending.length})</button>
+    <button class="chip" data-list="graded"  aria-pressed="${L==="graded"}" style="white-space:nowrap">🏅 Gradées (${graded.length})</button>
+    <button class="chip" data-list="reco"    aria-pressed="${L==="reco"}" style="white-space:nowrap">✨ IA</button></div>`;
   if (L === "reco") return chips + viewGradeReco();
   const list = L==="wish" ? wish : L==="dup" ? dup : L==="pending" ? pending : graded;
   const rowRight = d => L==="dup" ? "×"+(qty(d)-1)+" en trop" : L==="pending" ? (d.grade?.sentAt ? `envoyée ${new Date(d.grade.sentAt).toLocaleDateString("fr-FR")}` : "en attente") : eur(L==="wish" ? d.prices?.normal : cardValue(d));
