@@ -7,27 +7,30 @@ export default async function handler(req, res) {
     const key = process.env.GEMINI_API_KEY;
     if (!key) { res.status(503).json({ error: "no_key" }); return; }
 
-    const { cards = [], threshold = 15 } = req.body || {};
+    const { cards = [] } = req.body || {};
     if (!cards.length) { res.status(400).json({ error: "no_cards" }); return; }
 
-    const cardList = cards.map(c => `- ${c.name} (${c.setId}) : ${c.value.toFixed(2)} €`).join("\n");
+    // Liste avec le cardId explicite pour que Gemini le retourne tel quel
+    const cardList = cards.map(c => `- [${c.cardId}] ${c.name} (${c.setId})${c.value > 0 ? ` : ${c.value.toFixed(2)} €` : ""}`).join("\n");
 
-    const prompt = `Tu es un expert en cartes Pokémon et en grading (PSA, PCA, BGS).
-Voici une liste de cartes Pokémon avec leur valeur de marché actuelle (Cardmarket).
-Le seuil minimum retenu est ${threshold} €.
+    const prompt = `Tu es un expert en cartes Pokémon et en grading (PSA, PCA, BGS, PCA France).
+Voici la collection complète de cartes Pokémon non-gradées d'un collectionneur :
 
 ${cardList}
 
-Pour chaque carte, analyse si elle vaut le coup d'être gradée. Critères à considérer :
-- Popularité du Pokémon (Charizard, Pikachu, Mewtwo = forte demande)
-- Multiplicateur de valeur typique après grading PSA 10 (souvent ×2 à ×5 pour les cartes populaires)
-- Coût du grading (~35€ PSA, ~15€ PCA) vs gain espéré
-- Rareté et âge de la carte
-- Priorité : "haute" si gain net > 50€ probable, "moyenne" si gain net > 20€, "basse" sinon
+Analyse chaque carte et sélectionne celles qui valent VRAIMENT le coup d'être gradées.
+Critères principaux :
+- Popularité du Pokémon (Pikachu, Charizard, Mewtwo, starters = forte demande)
+- Édition et rareté : cartes vintage (Base Set, Fossil, Jungle, Neo), holographiques, Full Art, Alt Art
+- Multiplicateur de valeur estimé après PSA 10 (×2 minimum pour que ce soit rentable)
+- Coût du grading à déduire : ~35€ PSA, ~15€ PCA — si la carte vaut moins de 10€, c'est rarement rentable
+- Priorité : "haute" = gain net probable > 50€, "moyenne" = gain net > 20€, "basse" = intéressant mais incertain
+
+IMPORTANT : retourne le champ "cardId" EXACTEMENT comme il apparaît entre crochets [] dans la liste ci-dessus.
 
 Réponds UNIQUEMENT en JSON valide :
-{"recommendations":[{"name":"...","cardId":"...","reason":"...","priority":"haute|moyenne|basse","grader":"PSA|PCA|BGS","multiplier":2.5}]}
-Inclus seulement les cartes pour lesquelles le grading est rentable. Maximum 10 recommandations.`;
+{"recommendations":[{"cardId":"id-exact-de-la-liste","name":"...","reason":"explication courte en français","priority":"haute|moyenne|basse","grader":"PSA|PCA|BGS","multiplier":3.0}]}
+Inclus seulement les cartes rentables à grader. Maximum 12 recommandations, ordonnées par priorité décroissante.`;
 
     const payload = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],

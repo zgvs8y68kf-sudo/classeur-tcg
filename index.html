@@ -923,24 +923,21 @@ function viewLists(){
 
 function viewGradeReco(){
   const r = S.gradeReco;
-  const threshold = S.gradeThreshold || 15;
   const header = `<div class="note" style="margin-bottom:12px">
     <b>Analyse IA des cartes à grader</b>
-    <p class="muted" style="font-size:13px;margin:4px 0 8px">Gemini analyse ta collection et recommande les cartes qui valent la peine d'être gradées (coût ~25-40€ chez PSA, ~15€ chez PCA).</p>
-    <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
-      <label style="font-size:13px">Seuil min. : <input id="grade-threshold" type="number" min="5" max="500" step="5" value="${threshold}" style="width:70px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg)"> €</label>
-      <button class="btn primary" data-act="analyzegrade" style="font-size:13px">✨ Analyser avec Gemini</button>
-    </div>
+    <p class="muted" style="font-size:13px;margin:4px 0 10px">Gemini analyse toute ta collection et te dit quelles cartes valent le coup d'être gradées (coût ~35€ PSA, ~15€ PCA).</p>
+    <button class="btn primary" data-act="analyzegrade" style="font-size:13px">✨ Analyser avec Gemini</button>
   </div>`;
   if (!r) return header + `<p class="muted" style="font-size:13px">Lance l'analyse pour obtenir des recommandations personnalisées.</p>`;
   if (r.loading) return header + `<p class="muted"><span class="spinner"></span> Analyse en cours…</p>`;
   if (r.error) return header + `<div class="note">Analyse impossible : ${esc(r.error)}${r.error==="no_key" ? " — configure GEMINI_API_KEY sur Vercel." : ""}</div>`;
-  if (!r.items?.length) return header + `<div class="empty">Aucune carte ne dépasse le seuil ou Gemini n'a pas trouvé de recommandation.</div>`;
+  if (!r.items?.length) return header + `<div class="empty">Gemini n'a trouvé aucune carte intéressante à grader dans ta collection.</div>`;
   const cols = {"haute":"#22c55e","moyenne":"#f59e0b","basse":"#94a3b8"};
-  return header + `<div class="list">${r.items.map(x => `<button class="item" data-open="${esc(x.cardId||"")}">
-    ${x.image ? `<img src="${esc(x.image)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">` : `<span style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:block"></span>`}
+  const deck = r.items.filter(x => x.cardId).map(x => x.cardId);
+  return header + `<div class="list">${r.items.map(x => `<button class="item"${x.cardId ? ` data-open="${esc(x.cardId)}"` : ""}>
+    ${x.image ? `<img src="${esc(x.image)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">` : `<span style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:inline-block"></span>`}
     <span class="t"><b>${esc(x.name)}</b>
-      <small style="color:${cols[x.priority]||"var(--muted)"}">${x.priority==="haute"?"⭐ Priorité haute":x.priority==="moyenne"?"👍 Priorité moyenne":"➖ Faible priorité"} · ${esc(x.grader||"PSA")}</small>
+      <small style="color:${cols[x.priority]||"var(--muted)"}">${x.priority==="haute"?"⭐ Priorité haute":x.priority==="moyenne"?"👍 Priorité moyenne":"➖ Faible priorité"} · ${esc(x.grader||"PSA")}${x.value ? " · "+eur(x.value) : ""}</small>
       <small class="muted" style="display:block;margin-top:2px">${esc(x.reason)}</small>
     </span>
     <span class="p">${x.multiplier ? `×${x.multiplier}` : ""}</span>
@@ -948,35 +945,32 @@ function viewGradeReco(){
 }
 
 async function analyzeForGrading(){
-  const inp = document.getElementById("grade-threshold");
-  const threshold = inp ? (parseFloat(inp.value) || 15) : (S.gradeThreshold || 15);
-  S.gradeThreshold = threshold;
-  // Cartes possédées dont la valeur dépasse le seuil
+  // Toutes les cartes possédées non-gradées, triées par valeur décroissante
   const candidates = Object.values(S.coll)
     .filter(d => qty(d) && !d.grade?.co)
     .map(d => ({ cardId:d.cardId, name:d.name, setId:d.setId, value: cardValue(d)||0, image:d.image||"" }))
-    .filter(d => d.value >= threshold)
     .sort((a,b) => b.value - a.value)
-    .slice(0, 30);
+    .slice(0, 50);
   if (!candidates.length) {
-    S.gradeReco = { error: `Aucune carte non gradée ne dépasse ${threshold} €.` };
+    S.gradeReco = { error: "Aucune carte non-gradée dans ta collection." };
     render(); return;
   }
+  // Map cardId → candidate pour retrouver image/valeur après la réponse Gemini
+  const cardMap = Object.fromEntries(candidates.map(c => [c.cardId, c]));
   S.gradeReco = { loading: true }; render();
   try {
     const res = await fetch("/api/grade-analysis", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cards: candidates, threshold })
+      body: JSON.stringify({ cards: candidates })
     });
     const data = await res.json();
     if (!res.ok) { S.gradeReco = { error: data.error || "Erreur serveur" }; }
     else {
-      const items = (data.recommendations || []).map(r => ({
-        ...r,
-        cardId: r.cardId || (candidates.find(c => c.name === r.name)?.cardId || ""),
-        image:  r.image  || (candidates.find(c => c.name === r.name)?.image || "")
-      }));
+      const items = (data.recommendations || []).map(r => {
+        const orig = cardMap[r.cardId] || candidates.find(c => normStr(c.name) === normStr(r.name));
+        return { ...r, cardId: orig?.cardId || r.cardId || "", image: orig?.image || "", value: orig?.value || 0 };
+      }).filter(r => r.cardId);
       S.gradeReco = { items };
     }
   } catch(e) { S.gradeReco = { error: e.message || "Réseau indisponible" }; }
