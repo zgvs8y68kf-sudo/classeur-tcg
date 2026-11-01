@@ -138,7 +138,7 @@ h2{font:400 14px/1 var(--display);letter-spacing:.22em;text-transform:uppercase;
 @media (min-width:700px){.scrim{align-items:center}.sheet{border-radius:18px;max-height:88%}}
 .sheet .grab{width:48px;height:5px;border-radius:9px;background:var(--muted);opacity:.5;margin:0 auto 14px;cursor:grab}
 .sheet-header{display:flex;align-items:center;justify-content:flex-end;margin:-4px 0 10px}
-.sheet-close{border:0;background:rgba(255,255,255,.1);border-radius:50%;width:32px;height:32px;font-size:18px;line-height:1;display:grid;place-items:center;color:var(--fg)}
+.sheet-close{border:0;background:rgba(128,128,128,.18);border-radius:50%;width:40px;height:40px;font-size:20px;line-height:1;display:grid;place-items:center;color:var(--fg)}
 .detail{display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:16px}
 @media (max-width:520px){.detail{grid-template-columns:1fr}.detail .big{max-width:240px;margin:0 auto}}
 .big{width:100%;border-radius:12px;display:block;box-shadow:0 8px 24px rgba(0,0,0,.25)}
@@ -998,7 +998,8 @@ async function openCard(id, deck=[], dir=null){
       _sh.style.transform = 'translateX(0)';
     }));
   }
-  const close = () => { document.removeEventListener("keydown", _onKey); scrim.remove(); render(); };
+  let _onKey = null; // défini plus bas, après loadCard
+  const close = () => { if (_onKey) document.removeEventListener("keydown", _onKey); scrim.remove(); render(); };
   scrim.addEventListener("click", e => { if (e.target === scrim) close(); });
   const c = await loadCard(id);
   if (!c) { $(".sheet", scrim).innerHTML = `<div class="grab"></div><p>Carte introuvable.</p>`; return; }
@@ -1105,45 +1106,42 @@ async function openCard(id, deck=[], dir=null){
   const hasnav = deck.length > 1 && (prevId || nextId);
   const W = () => window.innerWidth;
 
-  // outDir : direction vers laquelle la carte courante sort ('left' | 'right')
-  // fromDrag : true si appelé depuis touchend (sheet déjà déplacée)
+  // Fermeture animée (glisse vers le bas)
+  const slideClose = (fromDrag=false) => {
+    if (_onKey) document.removeEventListener("keydown", _onKey);
+    const sh = scrim.querySelector(".sheet");
+    sh.style.transition = `transform ${fromDrag?'0.2s':'0.28s'} cubic-bezier(0.55,0,1,0.45), opacity 0.2s`;
+    sh.style.transform = `translateY(${window.innerHeight}px)`;
+    sh.style.opacity = '0';
+    setTimeout(() => { scrim.remove(); render(); }, fromDrag ? 210 : 290);
+  };
+
   const goTo = (nid, outDir, fromDrag=false) => {
     commit();
-    document.removeEventListener("keydown", _onKey);
+    if (_onKey) document.removeEventListener("keydown", _onKey);
     const sh = scrim.querySelector(".sheet");
     const dur = fromDrag ? 0.15 : 0.22;
     sh.style.transition = `transform ${dur}s cubic-bezier(0.55,0,1,0.45), opacity ${dur}s`;
     sh.style.transform = `translateX(${outDir === 'left' ? -W()*1.1 : W()*1.1}px)`;
     sh.style.opacity = '0';
-    // Nouveau scrim créé immédiatement (recouvre l'ancien, pas de flash de la page)
     openCard(nid, deck, outDir === 'left' ? 'right' : 'left');
     setTimeout(() => scrim.remove(), dur*1000 + 10);
   };
-  const _onKey = e => {
+  _onKey = e => {
     if (e.key === "ArrowLeft"  && prevId) { e.preventDefault(); goTo(prevId, 'right'); }
     else if (e.key === "ArrowRight" && nextId) { e.preventDefault(); goTo(nextId, 'left'); }
-    else if (e.key === "Escape") close();
+    else if (e.key === "Escape") slideClose();
   };
   if (hasnav) document.addEventListener("keydown", _onKey);
 
-  const origPaint = paint;
-  const paintWithNav = () => {
-    origPaint();
-    const hdr = scrim.querySelector(".sheet-header");
-    if (!hdr) return;
-    if (prevId) { const b = document.createElement("button"); b.className = "iconbtn"; b.id = "prevbtn"; b.setAttribute("aria-label","Carte précédente"); b.textContent = "‹"; b.style.cssText = "position:absolute;left:44px;top:10px;font-size:22px;line-height:1"; hdr.appendChild(b); }
-    if (nextId) { const b = document.createElement("button"); b.className = "iconbtn"; b.id = "nextbtn"; b.setAttribute("aria-label","Carte suivante"); b.textContent = "›"; b.style.cssText = "position:absolute;right:8px;top:10px;font-size:22px;line-height:1"; hdr.appendChild(b); }
-  };
-  paintWithNav();
+  paint();
 
   scrim.addEventListener("click", e => {
     const t = e.target.closest("button"); if (!t) return;
-    if (t.id === "prevbtn") return goTo(prevId, 'right');
-    if (t.id === "nextbtn") return goTo(nextId, 'left');
-    if (t.dataset.inc || t.dataset.dec) { const k = t.dataset.inc || t.dataset.dec; doc.v = {...doc.v, [k]: Math.max(0, (doc.v?.[k]||0) + (t.dataset.inc ? 1 : -1))}; commit(); paintWithNav(); }
-    else if (t.id === "wishbtn") { doc.wish = !doc.wish; commit(); paintWithNav(); }
-    else if (t.id === "delbtn") { Store.remove(id); close(); toast("Retirée"); }
-    else if (t.id === "okbtn" || t.id === "closebtn") { commit(); close(); }
+    if (t.dataset.inc || t.dataset.dec) { const k = t.dataset.inc || t.dataset.dec; doc.v = {...doc.v, [k]: Math.max(0, (doc.v?.[k]||0) + (t.dataset.inc ? 1 : -1))}; commit(); paint(); }
+    else if (t.id === "wishbtn") { doc.wish = !doc.wish; commit(); paint(); }
+    else if (t.id === "delbtn") { Store.remove(id); slideClose(); toast("Retirée"); }
+    else if (t.id === "okbtn" || t.id === "closebtn") { commit(); slideClose(); }
   });
   scrim.addEventListener("change", e => {
     if (e.target.id === "f-gstatus") {
@@ -1156,43 +1154,49 @@ async function openCard(id, deck=[], dir=null){
     commit();
   });
 
-  // Swipe physique : suit le doigt en temps réel
+  // Swipe physique : suit le doigt (horizontal = navigation, bas = fermer)
   const sheet = scrim.querySelector(".sheet");
-  let _tx0 = 0, _ty0 = 0, _tScroll = 0, _dragging = false;
+  let _tx0 = 0, _ty0 = 0, _tScroll = 0, _dragging = false, _dragDir = null;
   sheet.addEventListener("touchstart", e => {
     _tx0 = e.touches[0].clientX; _ty0 = e.touches[0].clientY;
-    _tScroll = sheet.scrollTop; _dragging = false;
+    _tScroll = sheet.scrollTop; _dragging = false; _dragDir = null;
     sheet.style.transition = 'none';
   }, {passive:true});
   sheet.addEventListener("touchmove", e => {
     const dx = e.touches[0].clientX - _tx0;
     const dy = e.touches[0].clientY - _ty0;
-    if (!_dragging) {
-      if (Math.abs(dy) > Math.abs(dx) + 4) return; // scroll vertical prioritaire
-      if (Math.abs(dx) > 8) _dragging = true; else return;
+    if (!_dragDir) {
+      if (dy > 0 && dy > Math.abs(dx) + 4 && _tScroll === 0) { _dragDir = 'v'; _dragging = true; }
+      else if (Math.abs(dx) > 8 && hasnav) { _dragDir = 'h'; _dragging = true; }
+      else return;
     }
-    if (!hasnav) return;
     e.preventDefault();
-    // Résistance au bord si pas de carte dans cette direction
-    const resist = dx > 0 ? (prevId ? 1 : 0.1) : (nextId ? 1 : 0.1);
-    sheet.style.transform = `translateX(${dx * resist}px)`;
-    sheet.style.opacity = String(Math.max(0.7, 1 - Math.abs(dx) / W() * 0.6));
+    if (_dragDir === 'h') {
+      const resist = dx > 0 ? (prevId ? 1 : 0.1) : (nextId ? 1 : 0.1);
+      sheet.style.transform = `translateX(${dx * resist}px)`;
+      sheet.style.opacity = String(Math.max(0.7, 1 - Math.abs(dx) / W() * 0.6));
+    } else {
+      const drag = Math.max(0, dy);
+      sheet.style.transform = `translateY(${drag}px)`;
+      sheet.style.opacity = String(Math.max(0.5, 1 - drag / 350));
+    }
   }, {passive:false});
   sheet.addEventListener("touchend", e => {
     const dx = e.changedTouches[0].clientX - _tx0;
     const dy = e.changedTouches[0].clientY - _ty0;
     sheet.style.opacity = '';
-    if (_dragging && hasnav) {
+    if (_dragDir === 'h') {
       const threshold = Math.min(110, W() * 0.3);
       if (dx >  threshold && prevId) { goTo(prevId, 'right', true); return; }
       if (dx < -threshold && nextId) { goTo(nextId, 'left',  true); return; }
-      // Retour élastique si seuil non atteint
       sheet.style.transition = 'transform 0.38s cubic-bezier(0.34,1.56,0.64,1)';
       sheet.style.transform = 'translateX(0)';
-    } else if (!_dragging && _tScroll === 0 && dy > 70) {
-      close();
+    } else if (_dragDir === 'v') {
+      if (dy > 130) { slideClose(true); return; }
+      sheet.style.transition = 'transform 0.38s cubic-bezier(0.34,1.56,0.64,1)';
+      sheet.style.transform = 'translateY(0)';
     }
-    _dragging = false;
+    _dragging = false; _dragDir = null;
   });
 }
 
