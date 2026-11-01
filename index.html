@@ -265,6 +265,7 @@ const S = {
   priceCache: {},         // cardId -> {cm, tp, at}
   coll: {},               // cardId -> doc
   history: [],            // [{d,v}]
+  cardPriceHist: {},      // cardId → [{d:"YYYY-MM-DD", v:number}] (90 j max)
   openSeries: new Set(JSON.parse(lsGet("openSeries") || "[]")),
   setView: null, setFilter: "all", setCatFilter: "all",
   scan: [], scanBusy: false,
@@ -316,7 +317,7 @@ const Store = {
     toast(ok.length + "/" + ids.length + " carte(s) locale(s) envoyée(s) dans ton compte");
   },
   loadLocal(){
-    try { S.coll = JSON.parse(lsGet("coll") || "{}"); S.history = JSON.parse(lsGet("hist") || "[]"); } catch { S.coll = {}; S.history = []; }
+    try { S.coll = JSON.parse(lsGet("coll") || "{}"); S.history = JSON.parse(lsGet("hist") || "[]"); S.cardPriceHist = JSON.parse(lsGet("ctcg_cph") || "{}"); } catch { S.coll = {}; S.history = []; S.cardPriceHist = {}; }
     render(); autoRefreshIfStale();
   },
   async save(card){
@@ -493,7 +494,14 @@ async function refreshPrices(btn){
     if (!c?.pricing) return;
     const prices = {}; for (const [k] of VARIANTS) prices[k] = priceOf(c.pricing, k).main;
     if (JSON.stringify(prices) !== JSON.stringify(d.prices)) await Store.save({...S.coll[d.cardId] || d, prices, priceSource:"Cardmarket via TCGdex", priceAt: Date.now()});
+    const pv = prices.normal ?? prices.holo ?? prices.reverse ?? null;
+    if (pv != null) {
+      const ph = (S.cardPriceHist[d.cardId] || []).filter(p => p.d !== today());
+      ph.push({d: today(), v: Math.round(pv*100)/100});
+      S.cardPriceHist[d.cardId] = ph.slice(-90);
+    }
   });
+  try { lsSet("ctcg_cph", JSON.stringify(S.cardPriceHist)); } catch {}
   const total = totals().value;
   const h = S.history.filter(p => p.d !== today()); h.push({d: today(), v: Math.round(total*100)/100});
   S.history = h.slice(-400); await Store.saveHistory();
@@ -541,6 +549,31 @@ function sparkline(points){
     <path d="${d} L${last[0]} ${H} L4 ${H} Z" fill="var(--accent)" fill-opacity=".12"/>
     <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>
     <circle cx="${last[0]}" cy="${last[1]}" r="4" fill="var(--accent)"/></svg>`;
+}
+
+function cardSparkline(pts){
+  if (!pts || pts.length < 2) return "";
+  const W = 600, H = 72, PAD = 6, vs = pts.map(p => p.v);
+  const min = Math.min(...vs), max = Math.max(...vs), rng = (max-min)||max*0.1||1;
+  const yMin = min - rng*0.15, rY = (max+rng*0.15) - yMin;
+  const toX = i => PAD + i*(W-PAD*2)/(pts.length-1);
+  const toY = v => H-4 - (v-yMin)/rY*(H-8);
+  const xy = pts.map((p,i) => [toX(i), toY(p.v)]);
+  const d = xy.map(([x,y],i) => (i?"L":"M")+x.toFixed(1)+" "+y.toFixed(1)).join(" ");
+  const [lx,ly] = xy[xy.length-1];
+  const up = pts[pts.length-1].v >= pts[0].v;
+  const col = up ? "#22c55e" : "#ef4444";
+  const svg = `<svg class="spark" style="height:72px" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Évolution du prix Cardmarket">
+    <defs><linearGradient id="cpg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${col}" stop-opacity=".28"/><stop offset="100%" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${d} L${lx.toFixed(1)} ${H} L${PAD} ${H} Z" fill="url(#cpg)"/>
+    <path d="${d}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4" fill="${col}"/></svg>`;
+  const first = pts[0], last = pts[pts.length-1];
+  const mid = pts.length > 2 ? pts[Math.floor(pts.length/2)] : null;
+  const lbl = (p, align) => `<span style="text-align:${align}"><span class="num" style="font-size:12px">${eur(p.v)}</span><br><span style="font-size:10px;color:var(--muted)">${esc(p.lbl||p.d)}</span></span>`;
+  const labels = `<div style="display:flex;justify-content:space-between;margin-top:2px">
+    ${lbl(first,"left")}${mid ? lbl(mid,"center") : ""}${lbl(last,"right")}</div>`;
+  return svg + labels;
 }
 
 function itemRow(d, right){
@@ -835,6 +868,21 @@ async function openCard(id){
           <div><b>${p.tp ? "$" + p.tp.toFixed(2) : "—"}</b><span>TCGplayer (US)</span></div>
         </div>
         ${!p.cm ? `<p class="muted" style="font-size:12px;margin:0 0 4px">Pas de cote Cardmarket pour cette carte (sorties récentes ou cartes japonaises).</p>` : ""}
+        ${(() => {
+          const hist = S.cardPriceHist[id] || [];
+          if (hist.length >= 2) {
+            const pts = hist.map(h => ({d: h.d, v: h.v, lbl: h.d.slice(5)}));
+            return `<div style="margin-top:8px">${cardSparkline(pts)}</div>`;
+          }
+          if (p.cm) {
+            const pts = [];
+            if (p.cm.avg30 != null) pts.push({d:"moy. 30j", v:p.cm.avg30, lbl:"moy. 30j"});
+            if (p.cm.avg7  != null) pts.push({d:"moy. 7j",  v:p.cm.avg7,  lbl:"moy. 7j"});
+            if (p.cm.trend != null) pts.push({d:"tendance", v:p.cm.trend, lbl:"tendance"});
+            return pts.length >= 2 ? `<div style="margin-top:8px">${cardSparkline(pts)}</div>` : "";
+          }
+          return "";
+        })()}
       </div>
     </div>
     <div class="links" style="margin-bottom:4px">
