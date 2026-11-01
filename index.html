@@ -341,7 +341,7 @@ const S = {
   priceAlerts: [],        // [{cardId,name,oldPrice,newPrice,pct,date,dismissed}]
   gradeReco: null,        // null | {loading:true} | {items:[...]} | {error:"..."}
   buyAdvice: null,        // null | {loading:true} | {items:[...]} | {error:"..."}
-  profile: { avatar: 'pikachu', displayName: '', preferredGrader: 'PSA', player2: 'Joueur 2' },
+  profile: { avatar: 'pikachu', displayName: '', preferredGrader: 'PSA', player2: 'Joueur 2', deckThreshold: 2 },
   decks: {},
   deckAdvice: null,
   energyStock: {},
@@ -1192,10 +1192,25 @@ function openBattleSetup(deckId){
 }
 
 async function generateDecks(){
-  const cards = Object.values(S.coll).filter(d=>qty(d)>0)
-    .map(d=>({cardId:d.cardId, name:d.name, setId:d.setId, qty:qty(d)}));
+  const threshEl = document.querySelector('[data-id="deck-threshold"]');
+  const threshold = parseFloat(threshEl?.value ?? S.profile.deckThreshold ?? 2);
+  S.profile.deckThreshold = threshold; saveProfile();
+
+  const cards = Object.values(S.coll)
+    .filter(d => {
+      const q = qty(d); if (!q) return false;
+      const v = cardValue(d) || 0;
+      // Exclure si trop chère et pas en double
+      return v <= threshold || q >= 2;
+    })
+    .map(d => {
+      const q = qty(d), v = cardValue(d) || 0;
+      // Si chère mais en double : 1 seule copie disponible pour le deck
+      const playQty = (v > threshold && q >= 2) ? q - 1 : q;
+      return { cardId: d.cardId, name: d.name, setId: d.setId, qty: playQty };
+    });
   const energy = ENERGY_TYPES.map(e=>({type:e.k, qty:S.energyStock[e.k]||0})).filter(e=>e.qty>0);
-  if (!cards.length) { S.deckAdvice={error:"Aucune carte dans la collection."}; render(); return; }
+  if (!cards.length) { S.deckAdvice={error:"Aucune carte jouable selon le seuil défini."}; render(); return; }
   S.deckAdvice={loading:true}; render();
   try {
     const res = await fetch("/api/deck-builder", {
@@ -1290,10 +1305,17 @@ function viewDecks(){
     <button class="btn" data-act="newdeck" style="font-size:12px">+ Nouveau deck</button>
   </h2>
   ${decksHtml}
-  <h2 style="margin:18px 0 10px;display:flex;align-items:center;justify-content:space-between">
-    <span>✨ Decks suggérés par l'IA</span>
-    <button class="btn primary" data-act="gendecks" style="font-size:12px">Générer</button>
-  </h2>
+  <h2 style="margin:18px 0 8px">✨ Decks suggérés par l'IA</h2>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px">
+      Exclure les cartes &gt;
+      <input type="number" data-id="deck-threshold" value="${S.profile.deckThreshold??2}" min="0" max="500" step="0.5"
+        style="width:58px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:7px;padding:4px 7px;font-size:13px;text-align:right">
+      €
+    </label>
+    <small class="muted" style="font-size:11px">(si en double, 1 copie reste utilisable)</small>
+    <button class="btn primary" data-act="gendecks" style="font-size:12px;margin-left:auto">✨ Générer</button>
+  </div>
   ${aiHtml || `<p class="muted" style="font-size:13px">Clique sur "Générer" pour que Gemini compose des decks depuis ta collection.</p>`}`;
 }
 
