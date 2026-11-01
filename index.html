@@ -225,7 +225,7 @@ nav.tabs .scan .orb svg{width:24px;height:24px;color:#fff}
   <button data-tab="series"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="9" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Séries</button>
   <button data-tab="scan" class="scan" aria-label="Scanner"><span class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3.2"/></svg></span></button>
   <button data-tab="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Chercher</button>
-  <button data-tab="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.4-9.3-9A5 5 0 0 1 12 6a5 5 0 0 1 9.3 6c-2.3 4.6-9.3 9-9.3 9z"/></svg>Listes</button>
+  <button data-tab="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l2.4 4.8 5.3.8-3.85 3.75.91 5.3L12 14.1l-4.76 2.55.91-5.3L4.3 7.6l5.3-.8z"/><path d="M12 14.1v7.4" stroke-linecap="round"/></svg>Conseil</button>
 </nav>
 <input type="file" id="photo-gallery" accept="image/*" multiple hidden>
 <input type="file" id="photo-page" accept="image/*" hidden>
@@ -274,6 +274,7 @@ const S = {
   cardPriceHist: {},      // cardId → [{d:"YYYY-MM-DD", v:number}] (90 j max)
   priceAlerts: [],        // [{cardId,name,oldPrice,newPrice,pct,date,dismissed}]
   gradeReco: null,        // null | {loading:true} | {items:[...]} | {error:"..."}
+  buyAdvice: null,        // null | {loading:true} | {items:[...]} | {error:"..."}
   listTab: "wish",
   openSeries: new Set(JSON.parse(lsGet("openSeries") || "[]")),
   setView: null, setFilter: "all", setCatFilter: "all",
@@ -895,53 +896,64 @@ async function doSearch(q){
   } catch { box.innerHTML = `<div class="note">Recherche impossible pour le moment.</div>`; }
 }
 
-function viewLists(){
-  const all = Object.values(S.coll);
-  const wish    = all.filter(d => d.wish && !qty(d));
-  const dup     = all.filter(d => qty(d) > 1);
-  const pending = all.filter(d => d.grade?.status === "pending" && qty(d));
-  const graded  = all.filter(d => d.grade?.co && d.grade?.status !== "pending" && qty(d));
-  const L = S.listTab;
-  const sum = L==="wish" ? wish.reduce((s,d)=>s+(d.prices?.normal||0),0) :
-              L==="dup"  ? dup.reduce((s,d)=>s+(cardValue(d)||0)/qty(d)*(qty(d)-1),0) :
-              L==="graded" ? graded.reduce((s,d)=>s+(cardValue(d)||0),0) : 0;
-  const label = {wish:"Coût estimé",dup:"Valeur des doubles",graded:"Valeur des cartes gradées"}[L]||"";
-  const chips = `<div class="chips" role="group" style="margin-bottom:12px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px">
-    <button class="chip" data-list="wish"    aria-pressed="${L==="wish"}" style="white-space:nowrap">♥ Souhaits (${wish.length})</button>
-    <button class="chip" data-list="dup"     aria-pressed="${L==="dup"}" style="white-space:nowrap">Doubles (${dup.length})</button>
-    <button class="chip" data-list="pending" aria-pressed="${L==="pending"}" style="white-space:nowrap">⏳ En cours (${pending.length})</button>
-    <button class="chip" data-list="graded"  aria-pressed="${L==="graded"}" style="white-space:nowrap">🏅 Gradées (${graded.length})</button>
-    <button class="chip" data-list="reco"    aria-pressed="${L==="reco"}" style="white-space:nowrap">✨ IA</button></div>`;
-  if (L === "reco") return chips + viewGradeReco();
-  const list = L==="wish" ? wish : L==="dup" ? dup : L==="pending" ? pending : graded;
-  const rowRight = d => L==="dup" ? "×"+(qty(d)-1)+" en trop" : L==="pending" ? (d.grade?.sentAt ? `envoyée ${new Date(d.grade.sentAt).toLocaleDateString("fr-FR")}` : "en attente") : eur(L==="wish" ? d.prices?.normal : cardValue(d));
-  return chips +
-    (label && sum ? `<div class="note" style="margin-bottom:12px">${label} : <b class="num" style="color:var(--fg)">${eur(sum)}</b></div>` : "") +
-    `<div class="list">${list.length ? list.map(d => itemRow(d, rowRight(d))).join("") :
-      `<div class="empty">${L==="wish" ? "Ouvre une carte manquante et touche ♥ pour l'ajouter à ta liste de souhaits." : L==="dup" ? "Pas encore de doubles." : L==="pending" ? "Marque une carte « En cours » dans sa fiche pour la suivre ici." : "Indique le grading (PCA, PSA…) dans la fiche d'une carte."}</div>`}</div>`;
-}
-
-function viewGradeReco(){
-  const r = S.gradeReco;
-  const header = `<div class="note" style="margin-bottom:12px">
-    <b>Analyse IA des cartes à grader</b>
-    <p class="muted" style="font-size:13px;margin:4px 0 10px">Gemini analyse toute ta collection et te dit quelles cartes valent le coup d'être gradées (coût ~35€ PSA, ~15€ PCA).</p>
-    <button class="btn primary" data-act="analyzegrade" style="font-size:13px">✨ Analyser avec Gemini</button>
+/* Helpers partagés pour les sections IA */
+function _aiSection(title, icon, content){
+  return `<div style="margin-bottom:22px">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">${icon} ${title}</div>
+    ${content}
   </div>`;
-  if (!r) return header + `<p class="muted" style="font-size:13px">Lance l'analyse pour obtenir des recommandations personnalisées.</p>`;
-  if (r.loading) return header + `<p class="muted"><span class="spinner"></span> Analyse en cours…</p>`;
-  if (r.error) return header + `<div class="note">Analyse impossible : ${esc(r.error)}${r.error==="no_key" ? " — configure GEMINI_API_KEY sur Vercel." : ""}</div>`;
-  if (!r.items?.length) return header + `<div class="empty">Gemini n'a trouvé aucune carte intéressante à grader dans ta collection.</div>`;
-  const cols = {"haute":"#22c55e","moyenne":"#f59e0b","basse":"#94a3b8"};
-  const deck = r.items.filter(x => x.cardId).map(x => x.cardId);
-  return header + `<div class="list">${r.items.map(x => `<button class="item"${x.cardId ? ` data-open="${esc(x.cardId)}"` : ""}>
+}
+function _aiItemList(items, cols){
+  if (!items.length) return `<div class="empty" style="font-size:13px">Aucune recommandation.</div>`;
+  return `<div class="list">${items.map(x => `<button class="item"${x.cardId ? ` data-open="${esc(x.cardId)}"` : ""}>
     ${x.image ? `<img src="${esc(x.image)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">` : `<span style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:inline-block"></span>`}
     <span class="t"><b>${esc(x.name)}</b>
-      <small style="color:${cols[x.priority]||"var(--muted)"}">${x.priority==="haute"?"⭐ Priorité haute":x.priority==="moyenne"?"👍 Priorité moyenne":"➖ Faible priorité"} · ${esc(x.grader||"PSA")}${x.value ? " · "+eur(x.value) : ""}</small>
-      <small class="muted" style="display:block;margin-top:2px">${esc(x.reason)}</small>
+      <small style="color:${(cols||{})[x.priority]||"var(--muted)"}">${x.priority==="haute"?"⭐ Priorité haute":x.priority==="moyenne"?"👍 Priorité moyenne":"➖ Priorité faible"}${x.badge?" · "+esc(x.badge):""}</small>
+      <small class="muted" style="display:block;margin-top:2px">${esc(x.reason||"")}</small>
     </span>
-    <span class="p">${x.multiplier ? `×${x.multiplier}` : ""}</span>
+    <span class="p">${x.right||""}</span>
   </button>`).join("")}</div>`;
+}
+
+function viewLists(){
+  const cols = {"haute":"#22c55e","moyenne":"#f59e0b","basse":"#94a3b8"};
+
+  /* ── 1. Alertes de prix ── */
+  const active = S.priceAlerts.filter(a => !a.dismissed);
+  const alertsHtml = active.length
+    ? `<div class="list">${active.slice(0,8).map(a => {
+        const d = S.coll[a.cardId]; const img = d?.image||"";
+        return `<button class="item" data-open="${esc(a.cardId)}">
+          ${img ? `<img src="${esc(img)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">` : `<span style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:inline-block"></span>`}
+          <span class="t"><b>${esc(a.name)}</b>
+            <small style="color:#22c55e">+${Math.round((a.pct||0)*100)} % · ${eur(a.oldPrice)} → ${eur(a.newPrice)}</small>
+            <small class="muted">${esc(new Date(a.date).toLocaleDateString("fr-FR"))}</small>
+          </span>
+          <button class="iconbtn" data-dismissalert="${esc(a.cardId+":"+a.date)}" style="font-size:16px;flex:none" aria-label="Ignorer">✕</button>
+        </button>`;}).join("")}
+      </div>`
+    : `<p class="muted" style="font-size:13px">Aucune hausse détectée pour le moment. Les alertes apparaissent ici quand une carte de ta collection prend ≥ 25 % en un jour.</p>`;
+
+  /* ── 2. Grading ── */
+  const rg = S.gradeReco;
+  const gradingBtn = `<button class="btn primary" data-act="analyzegrade" style="font-size:13px;margin-bottom:10px">✨ Analyser ma collection</button>`;
+  const gradingHtml = rg?.loading ? `${gradingBtn}<p class="muted"><span class="spinner"></span> Analyse en cours…</p>`
+    : rg?.error ? `${gradingBtn}<div class="note" style="font-size:13px">Erreur : ${esc(rg.error)}${rg.error==="no_key"?" — configure GEMINI_API_KEY sur Vercel.":""}</div>`
+    : rg?.items?.length ? gradingBtn + _aiItemList(rg.items.map(x=>({...x, badge:(x.grader||"PSA")+(x.value?" · "+eur(x.value):""), right:x.multiplier?`×${x.multiplier}`:""})), cols)
+    : `${gradingBtn}<p class="muted" style="font-size:13px">${rg ? "Aucune carte intéressante à grader trouvée." : "Lance l'analyse pour savoir quelles cartes valent le coup d'être gradées (coût ~35 € PSA, ~15 € PCA)."}</p>`;
+
+  /* ── 3. Conseils d'achat ── */
+  const rb = S.buyAdvice;
+  const buyBtn = `<button class="btn" data-act="getbuyadvice" style="font-size:13px;margin-bottom:10px">🔍 Quoi acheter ?</button>`;
+  const buyHtml = rb?.loading ? `${buyBtn}<p class="muted"><span class="spinner"></span> Analyse en cours…</p>`
+    : rb?.error ? `${buyBtn}<div class="note" style="font-size:13px">Erreur : ${esc(rb.error)}${rb.error==="no_key"?" — configure GEMINI_API_KEY sur Vercel.":""}</div>`
+    : rb?.items?.length ? buyBtn + _aiItemList(rb.items.map(x=>({...x, badge:x.setName||"", right:x.estValue?eur(x.estValue):""})), cols)
+    : `${buyBtn}<p class="muted" style="font-size:13px">${rb ? "Aucune suggestion pour le moment." : "Gemini analyse tes extensions incomplètes et te recommande les cartes manquantes à fort potentiel."}</p>`;
+
+  return `<h2 style="font-size:17px;font-weight:700;margin:0 0 18px;display:flex;align-items:center;gap:7px">✨ Conseiller IA</h2>
+    ${_aiSection("Alertes de valeur", "📈", alertsHtml)}
+    ${_aiSection("Cartes à grader", "🎓", gradingHtml)}
+    ${_aiSection("Cartes à acquérir", "🛒", buyHtml)}`;
 }
 
 async function analyzeForGrading(){
@@ -974,6 +986,40 @@ async function analyzeForGrading(){
       S.gradeReco = { items };
     }
   } catch(e) { S.gradeReco = { error: e.message || "Réseau indisponible" }; }
+  render();
+}
+
+async function getBuyingAdvice(){
+  // Extensions incomplètes où l'on a déjà des cartes (contexte de collection)
+  const sets = Object.values(S.catalog?.sets || {})
+    .map(set => {
+      const owned = Object.values(S.coll).filter(d => d.setId === set.id && qty(d)).length;
+      const total = set.official || set.total || 0;
+      return { name: set.name, setId: set.id, owned, total, pct: total ? Math.round(owned/total*100) : 0 };
+    })
+    .filter(s => s.owned > 0 && s.pct < 100 && s.total > 0)
+    .sort((a,b) => b.owned - a.owned)
+    .slice(0, 25);
+  // Cartes déjà dans la liste de souhaits
+  const wished = Object.values(S.coll).filter(d => d.wish && !qty(d))
+    .map(d => ({ name: d.name, setId: d.setId, cardId: d.cardId })).slice(0, 20);
+  if (!sets.length) {
+    S.buyAdvice = { error: "Scan des cartes pour construire ta collection d'abord." };
+    render(); return;
+  }
+  S.buyAdvice = { loading: true }; render();
+  try {
+    const res = await fetch("/api/buy-advice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sets, wished })
+    });
+    const data = await res.json();
+    if (!res.ok) { S.buyAdvice = { error: data.error || "Erreur serveur" }; }
+    else {
+      S.buyAdvice = { items: data.recommendations || [] };
+    }
+  } catch(e) { S.buyAdvice = { error: e.message || "Réseau indisponible" }; }
   render();
 }
 
@@ -2011,6 +2057,7 @@ document.addEventListener("click", e => {
   if (act === "tosearch") { go("search"); const q = $("#q"); if (q) { q.value = b.dataset.q; doSearch(b.dataset.q.trim()); } }
   if (act === "reqnotif") { Notification.requestPermission().then(p => { if (p==="granted") toast("Alertes prix activées 🔔"); render(); }); return; }
   if (act === "analyzegrade") { analyzeForGrading(); return; }
+  if (act === "getbuyadvice") { getBuyingAdvice(); return; }
   if (b.dataset.dismissalert) {
     const [cid, date] = b.dataset.dismissalert.split(":");
     S.priceAlerts = S.priceAlerts.map(a => a.cardId===cid && a.date===date ? {...a, dismissed:true} : a);
