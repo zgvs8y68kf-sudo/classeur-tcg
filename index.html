@@ -1685,7 +1685,13 @@ document.addEventListener("click", e => {
   if (act === "clearscan") { S.scan = []; return render(); }
   if (act === "refresh") return refreshPrices(b);
   if (act === "export") return exportCsv();
-  if (act === "clearall") { if (confirm("Vider toute la collection ? Cette action est irréversible.")) Store.clearAll(); return; }
+  if (act === "clearall") {
+    const n = Object.keys(S.coll).length;
+    if (!confirm(`Vider toute la collection ?\n${n} carte(s) seront supprimées définitivement.`)) return;
+    const mot = prompt(`Pour confirmer, tape VIDER en majuscules :`);
+    if (mot?.trim() !== "VIDER") { toast("Annulé."); return; }
+    Store.clearAll(); return;
+  }
   if (act === "back") return go("series");
   if (act === "reloadcat") return loadCatalog(true);
   if (act === "tosearch") { go("search"); const q = $("#q"); if (q) { q.value = b.dataset.q; doSearch(b.dataset.q.trim()); } }
