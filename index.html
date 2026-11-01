@@ -751,23 +751,29 @@ function viewSearch(){
 let searchTimer;
 // Détecte si la saisie ressemble à un numéro de carte (ex: 136, 136/189, SV001, TG03)
 function isNumQuery(q){ return /^[A-Za-z]{0,4}\d+(?:\/\d+)?$/.test(q.trim()); }
-function numQueryId(q){ return q.trim().replace(/\/\d+$/, ""); } // "136/189" → "136"
+function parseNumQuery(q){
+  const m = q.trim().match(/^([A-Za-z]{0,4}\d+)(?:\/(\d+))?$/);
+  return m ? {localId: m[1], total: m[2] ? parseInt(m[2]) : null} : null;
+}
 async function doSearch(q){
   const box = $("#results"); if (!box) return;
   const isNum = isNumQuery(q);
+  const numP = isNum ? parseNumQuery(q) : null;
   if (q.length < (isNum ? 2 : 3)) return;
   box.innerHTML = `<p class="muted"><span class="spinner"></span> Recherche…</p>`;
   try {
-    const param = isNum ? `localId=${encodeURIComponent(numQueryId(q))}` : `name=${encodeURIComponent(q)}`;
+    const param = isNum ? `localId=${encodeURIComponent(numP.localId)}` : `name=${encodeURIComponent(q)}`;
     const res = await j(`${API}/${S.lang}/cards?${param}`);
     if ($("#q")?.value.trim() !== q) return;
-    const list = (res || []).map(c => ({...c, setId: c.id.slice(0, c.id.lastIndexOf("-"))}));
+    let list = (res || []).map(c => ({...c, setId: c.id.slice(0, c.id.lastIndexOf("-"))}));
+    // Si "136/189" : ne garder que les cartes dont l'extension a exactement 189 cartes officielles
+    if (numP?.total) list = list.filter(c => { const s = S.catalog?.sets?.[c.setId]; return s && (s.official === numP.total || s.total === numP.total); });
     box.innerHTML = list.length ? `<div class="binder">${list.slice(0, 120).map(c => { const d = S.coll[c.id], qn = d ? qty(d) : 0;
       const cinfo = esc(JSON.stringify({name:c.name,setId:c.setId,localId:c.localId,image:c.image||""}));
       return `<button class="pocket ${qn?"":"missing"}" data-open="${esc(c.id)}" aria-label="${esc(c.name)}">${c.image ? `<img src="${esc(c.image)}/low.webp" alt="" loading="lazy">` : `<span class="noimg">${esc(c.name)}</span>`}
       <span class="no">${esc(S.catalog?.sets?.[c.setId]?.name?.slice(0,14) || c.setId)} ${esc(c.localId)}</span>${qn>1?`<span class="qty">×${qn}</span>`:""}
       <span class="pocket-add" data-quickadd="${esc(c.id)}" data-qacinfo="${cinfo}" aria-label="Ajouter ${esc(c.name)}">+</span></button>`; }).join("")}</div>
-      <p class="muted" style="font-size:12px">${list.length} résultat(s)${isNum ? ` pour le n° ${esc(numQueryId(q))}` : ""}. Les cartes en gris ne sont pas dans ta collection.</p>` : `<div class="empty">Aucune carte ${isNum ? `n° ${esc(numQueryId(q))}` : `« ${esc(q)} »`}.</div>`;
+      <p class="muted" style="font-size:12px">${list.length} résultat(s)${isNum ? ` pour le n° ${esc(q.trim())}` : ""}. Les cartes en gris ne sont pas dans ta collection.</p>` : `<div class="empty">Aucune carte ${isNum ? `n° ${esc(q.trim())}` : `« ${esc(q)} »`}.</div>`;
   } catch { box.innerHTML = `<div class="note">Recherche impossible pour le moment.</div>`; }
 }
 
