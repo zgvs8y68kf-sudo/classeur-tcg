@@ -247,6 +247,13 @@ nav.tabs .scan .orb svg{width:24px;height:24px;color:#fff}
 .prof-intro img{width:56px;height:56px;object-fit:contain;flex-shrink:0}
 .prof-intro p{margin:0;font-size:13px;color:var(--muted);line-height:1.55}
 .prof-intro strong{color:var(--fg);font-size:14px;display:block;margin-bottom:3px}
+/* Cotes gradées référence */
+.grade-ref{margin:6px 0 10px}
+.gref-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.gref-co{font-weight:700;font-size:13px;min-width:32px;flex:none}
+.gref-cell{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1}
+.gref-cell>span{font-size:11px;color:var(--muted)}
+.gref-cell input{width:100%;border:1px solid var(--line);border-radius:6px;padding:5px 4px;font-size:13px;text-align:center;background:var(--surface);color:var(--fg)}
 /* Scanner vidéo */
 #vscan-ov{position:fixed;inset:0;z-index:50;background:#000;display:flex;flex-direction:column}
 #vscan-vidwrap{flex:1;position:relative;min-height:0;overflow:hidden}
@@ -1010,6 +1017,7 @@ function _aiItemList(items, cols){
     <span class="t"><b>${esc(x.name)}</b>
       <small style="color:${(cols||{})[x.priority]||"var(--muted)"}">${x.priority==="haute"?"⭐ Priorité haute":x.priority==="moyenne"?"👍 Priorité moyenne":"➖ Priorité faible"}${x.badge?" · "+esc(x.badge):""}</small>
       <small class="muted" style="display:block;margin-top:2px">${esc(x.reason||"")}</small>
+      ${x.sub?`<small style="display:block;margin-top:2px;color:var(--accent);font-size:11px">${esc(x.sub)}</small>`:""}
     </span>
     <span class="p">${x.right||""}</span>
   </button>`).join("")}</div>`;
@@ -1422,7 +1430,11 @@ function viewLists(){
   </div>`;
   const gradingHtml = rg?.loading ? `${gradingBtn}<p class="muted"><span class="spinner"></span> Analyse en cours…</p>`
     : rg?.error ? `${gradingBtn}<div class="note" style="font-size:13px">Erreur : ${esc(rg.error)}${rg.error==="no_key"?" — configure GEMINI_API_KEY sur Vercel.":""}</div>`
-    : rg?.items?.length ? gradingBtn + _aiItemList(rg.items.map(x=>({...x, badge:(x.grader||pg)+(x.value?" · "+eur(x.value):""), right:x.multiplier?`×${x.multiplier}`:""})), cols)
+    : rg?.items?.length ? gradingBtn + _aiItemList(rg.items.map(x=>{
+        const ref = S.coll[x.cardId]?.gradeRef;
+        const sub = ref ? Object.entries(ref).map(([co,vals])=>`${co} — `+[10,9,8].filter(n=>vals[n]!=null).map(n=>`${n}: ${eur(vals[n])}`).join(" · ")).join("  ") : "";
+        return {...x, badge:(x.grader||pg)+(x.value?" · "+eur(x.value):""), right:x.multiplier?`×${x.multiplier}`:"", sub};
+      }), cols)
     : `${gradingBtn}<p class="muted" style="font-size:13px">${rg ? "Aucune carte intéressante à grader trouvée." : `Lance l'analyse pour savoir quelles cartes valent le coup d'être gradées avec ${pg} (${graderCosts[pg]||"~30 €"}).`}</p>`;
 
   /* ── 3. Conseils d'achat ── */
@@ -1684,7 +1696,16 @@ async function openCard(id, deck=[], dir=null){
       <label class="field">Note<input id="f-gnote" type="text" placeholder="ex. 10, 9.5" value="${esc(doc.grade?.note||"")}"></label>
       <label class="field">Valeur gradée (€)<input id="f-gval" type="number" inputmode="decimal" min="0" step="1" value="${doc.grade?.value??""}" placeholder="remplace la cote"></label>
     </div>
-    <label class="field" style="margin-top:10px">Note perso<input id="f-note" type="text" value="${esc(doc.note||"")}" placeholder="ex. classeur bleu, page 4"></label>
+    <h2 style="margin:14px 0 5px;font-size:14px">Cotes gradées <small style="font-weight:400;font-size:12px;color:var(--muted)">référence marché</small></h2>
+    <div class="grade-ref">
+      ${["PSA","PCA"].map(co=>`<div class="gref-row">
+        <span class="gref-co">${co}</span>
+        ${[10,9,8].map(n=>`<label class="gref-cell"><span>${n}</span>
+          <input id="gr-${co.toLowerCase()}${n}" type="number" inputmode="decimal" min="0" step="1" value="${doc.gradeRef?.[co]?.[n]??""}" placeholder="—">
+        </label>`).join("")}
+      </div>`).join("")}
+    </div>
+    <label class="field" style="margin-top:4px">Note perso<input id="f-note" type="text" value="${esc(doc.note||"")}" placeholder="ex. classeur bleu, page 4"></label>
     <div class="row" style="margin-top:16px;justify-content:space-between">
       ${S.coll[id] ? `<button class="btn" id="delbtn">Retirer de la collection</button>` : "<span></span>"}
       <button class="btn primary" id="okbtn">Fermer</button></div>`;
@@ -1692,7 +1713,8 @@ async function openCard(id, deck=[], dir=null){
   const commit = () => {
     doc = {...doc, prices, priceSource:"Cardmarket via TCGdex", priceAt: Date.now(), cond: $("#f-cond",scrim).value, lang: $("#f-lang",scrim).value,
       paid: $("#f-paid",scrim).value === "" ? null : +$("#f-paid",scrim).value, note: $("#f-note",scrim).value.trim(),
-      grade: (() => { const gs = $("#f-gstatus",scrim)?.value||"", gc = gs ? ($("#f-gco",scrim)?.value||"") : ""; if (!gs||!gc) return null; if (gs==="pending") return {status:"pending",co:gc,sentAt:$("#f-gsentat",scrim)?.value||""}; return {status:"done",co:gc,note:$("#f-gnote",scrim)?.value?.trim()||"",value:$("#f-gval",scrim)?.value===""?null:+$("#f-gval",scrim)?.value}; })()};
+      grade: (() => { const gs = $("#f-gstatus",scrim)?.value||"", gc = gs ? ($("#f-gco",scrim)?.value||"") : ""; if (!gs||!gc) return null; if (gs==="pending") return {status:"pending",co:gc,sentAt:$("#f-gsentat",scrim)?.value||""}; return {status:"done",co:gc,note:$("#f-gnote",scrim)?.value?.trim()||"",value:$("#f-gval",scrim)?.value===""?null:+$("#f-gval",scrim)?.value}; })(),
+      gradeRef: (() => { const ref={}; for (const co of ["PSA","PCA"]) for (const n of [10,9,8]) { const el=scrim.querySelector(`#gr-${co.toLowerCase()}${n}`); if (el&&el.value!=="") { if(!ref[co])ref[co]={}; ref[co][n]=+el.value; } } return Object.keys(ref).length?ref:(doc.gradeRef??null); })()};
     if (!doc.addedAt && qty(doc)) doc.addedAt = Date.now();
     if (qty(doc) || doc.wish) Store.save(doc); else if (S.coll[id]) Store.remove(id);
   };

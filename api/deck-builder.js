@@ -19,30 +19,68 @@ CARTES POSSÉDÉES :
 ${cardList}
 
 CARTES ÉNERGIE DISPONIBLES :
-${energyList || "Stock non précisé — suppose des énergies de base en quantité illimitée."}
+${energyList || "Stock non précisé — considère toutes les Énergies de base disponibles en illimité."}
 
-RÈGLES TCG OFFICIELLES :
-- Deck de 60 cartes exactement
-- Maximum 4 exemplaires d'une même carte non-énergie
-- Au moins 1 Pokémon de base dans la main de départ
-- Catégories : Pokémon (actif + banc), Dresseurs (Objets, Supporters, Stades), Énergies
-- Structure typique : 12-20 Pokémon, 25-35 Dresseurs, 10-15 Énergies
+═══════════════════════════════════════════
+RÈGLES OFFICIELLES POKÉMON TCG (obligatoires)
+═══════════════════════════════════════════
 
-À partir de cette collection, compose 2 ou 3 decks compétitifs et cohérents.
+STRUCTURE DU DECK :
+• 60 cartes EXACTEMENT — ni plus, ni moins
+• Maximum 4 exemplaires d'une même carte NON-ÉNERGIE (par nom)
+• Énergies de Base (Feu, Eau, Plante, Foudre, Psy, Combat, Obscurité, Métal, Incolore) : ILLIMITÉES, aucune restriction de copie
+• Énergies Spéciales : limitées à 4 exemplaires comme toute autre carte
+• Minimum 1 Pokémon de Base dans la main de départ (main initiale = 7 cartes)
+• 6 cartes Récompense mises de côté face cachée au début
+
+CATÉGORIES (les 3 types de cartes) :
+1. Pokémon : Actif (1) + Banc (5 max). Base → Stade 1 → Stade 2. Pokémon-ex/V/VMAX/VSTAR comptent comme Pokémon.
+2. Dresseurs : Objets (jouables à volonté), Supporters (1 par tour), Stades (1 actif)
+3. Énergies : attachez 1 Énergie par tour à votre Pokémon actif ou sur le banc
+
+DÉROULEMENT D'UN TOUR :
+1. Piocher 1 carte
+2. Actions possibles (dans n'importe quel ordre) : poser des Pokémon de Base, faire évoluer, attacher 1 Énergie, jouer des cartes Dresseur, battre en retraite (payer le coût en Énergies)
+3. Attaquer (met fin au tour)
+
+CONDITIONS DE VICTOIRE :
+• Prendre les 6 cartes Récompense (1 par KO adverse)
+• L'adversaire ne peut pas piocher au début de son tour
+• L'adversaire n'a plus aucun Pokémon en jeu
+
+ÉTAT DU POKÉMON ACTIF :
+• Empoisonné : −10 PV entre les tours
+• Brûlé : −20 PV entre les tours, puis pile ou face (face = guéri, pile = reste brûlé)
+• Confus : pile ou face pour attaquer (pile = 30 dégâts sur soi-même)
+• Endormi : ne peut pas attaquer ni battre en retraite, pile ou face pour se réveiller
+• Paralysé : ne peut pas attaquer ni battre en retraite pendant 1 tour
+
+═══════════════════════════════════════════
+CONSIGNES DE CONSTRUCTION
+═══════════════════════════════════════════
+
+Structure recommandée pour un deck de 60 cartes :
+• 10-18 Pokémon (dont 4-6 Pokémon de Base, 2-4 Évolutions, éventuellement des ex/V)
+• 28-36 Dresseurs (dont 8-12 Supporters, 10-16 Objets comme Poké Ball, 2-4 Stades si pertinent)
+• 8-14 Énergies (de préférence majoritairement de Base pour la cohérence du type)
+
+À partir de la collection disponible, compose 2 ou 3 decks compétitifs et cohérents.
 Pour chaque deck :
-1. Utilise en priorité les cartes déjà possédées
-2. Indique les cartes manquantes essentielles (max 5)
-3. Explique la stratégie en 2-3 phrases
-4. Assure-toi que le total fait 60 cartes
+1. Respecte ABSOLUMENT les 60 cartes exactement (compte chaque carte)
+2. N'utilise que les quantités disponibles indiquées (×N = N exemplaires max)
+3. Indique les 3-5 cartes manquantes les plus importantes pour améliorer le deck
+4. Explique la stratégie en 2-3 phrases claires
 
-IMPORTANT : retourne uniquement du JSON valide :
+IMPORTANT : retourne uniquement du JSON valide, sans texte avant ni après :
 {"decks":[{
-  "name":"Nom du deck",
+  "name":"Nom du deck (type de stratégie)",
   "strategy":"Stratégie en 2-3 phrases",
   "cards":[{"cardId":"id-de-la-liste-ou-vide","name":"Nom carte","qty":4,"owned":true}],
-  "energy":[{"type":"Feu","qty":8}],
+  "energy":[{"type":"Feu","qty":10}],
   "missingCards":[{"name":"Carte manquante","setName":"Extension","qty":2,"reason":"Pourquoi essentielle"}]
 }]}
+
+Règle de vérification : sum(cards[].qty) + sum(energy[].qty) DOIT être égale à 60.
 Maximum 3 decks. Ordonnés du plus fort au moins fort avec les cartes disponibles.`;
 
     const payload = JSON.stringify({
