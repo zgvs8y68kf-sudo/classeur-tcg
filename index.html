@@ -326,6 +326,22 @@ const Store = {
   async saveHistory(){
     if (this.mode === "db") { const {fs, db} = this.fb; try { await fs.setDoc(fs.doc(db, "users", this.uid, "meta", "history"), {points: S.history}); } catch {} }
     else lsSet("hist", JSON.stringify(S.history));
+  },
+  async clearAll(){
+    const ids = Object.keys(S.coll);
+    S.coll = {}; S.history = []; render();
+    if (this.mode === "db"){
+      const {fs, db} = this.fb;
+      try {
+        await Promise.all([
+          ...ids.map(id => fs.deleteDoc(fs.doc(db, "users", this.uid, "cards", id))),
+          fs.deleteDoc(fs.doc(db, "users", this.uid, "meta", "history"))
+        ]);
+      } catch(e){ toast("Erreur vidage : " + (e.code || e.message)); }
+    } else {
+      lsSet("coll", "{}"); lsSet("hist", "[]");
+    }
+    toast("Collection vidée");
   }
 };
 
@@ -489,6 +505,7 @@ function viewHome(){
       <button class="btn primary" data-act="scan">Scanner des cartes</button>
       <button class="btn" id="refresh" data-act="refresh" ${empty?"disabled":""}>Actualiser les prix</button>
       <button class="btn" data-act="export" ${empty?"disabled":""}>Exporter (CSV)</button>
+      <button class="btn" data-act="clearall" style="color:var(--accent);border-color:var(--accent)">Vider la collection</button>
     </div>
     ${lastStr ? `<p class="muted" style="font-size:12px;margin:10px 0 0">${lastStr} · Cardmarket via TCGdex</p>` : ""}
   </section>
@@ -1485,6 +1502,7 @@ document.addEventListener("click", e => {
   if (act === "clearscan") { S.scan = []; return render(); }
   if (act === "refresh") return refreshPrices(b);
   if (act === "export") return exportCsv();
+  if (act === "clearall") { if (confirm("Vider toute la collection ? Cette action est irréversible.")) Store.clearAll(); return; }
   if (act === "back") return go("series");
   if (act === "reloadcat") return loadCatalog(true);
   if (act === "tosearch") { go("search"); const q = $("#q"); if (q) { q.value = b.dataset.q; doSearch(b.dataset.q.trim()); } }
