@@ -183,6 +183,58 @@ nav.tabs .scan{transform:translateY(-14px)}
 nav.tabs .scan .orb{width:56px;height:56px;border-radius:50%;background:conic-gradient(from var(--ha),#ff6bb8,#ffd36e,#6bffb8,#6bb5ff,#c46bff,#ff6bb8);animation:holo 5s linear infinite;display:grid;place-items:center;box-shadow:0 4px 24px rgba(180,0,220,.5);border:3px solid var(--bg)}
 nav.tabs .scan .orb svg{width:24px;height:24px;color:#fff}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;z-index:30;font-size:14px;max-width:90%}
+/* ── Deck builder ──────────────────────────────────────── */
+.deck-grid{display:grid;gap:10px}
+@media(min-width:640px){.deck-grid{grid-template-columns:repeat(2,1fr)}}
+.deck-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:7px}
+.deck-card h3{margin:0;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.deck-card .dstrat{font-size:12px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.5}
+.deck-card .dmeta{font-size:11px;color:var(--muted)}
+.deck-card .dactions{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
+.energy-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0}
+@media(min-width:480px){.energy-grid{grid-template-columns:repeat(6,1fr)}}
+.energy-cell{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px 3px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;color:var(--muted)}
+.energy-cell .eico{font-size:17px;line-height:1}
+.energy-cell .ecnt{font:700 14px var(--display);font-variant-numeric:tabular-nums;color:var(--fg)}
+.energy-cell .ectrl{display:flex;gap:2px;margin-top:2px}
+.energy-cell .ectrl button{border:0;background:rgba(255,255,255,.1);border-radius:4px;width:22px;height:22px;font:700 15px/1 var(--body);color:var(--fg);cursor:pointer}
+/* ── Battle assistant ───────────────────────────────────── */
+.battle-player{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.bat-active{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;cursor:pointer;transition:border-color .15s;min-height:70px}
+.bat-active.empty{display:flex;align-items:center;justify-content:center;opacity:.45;font-size:13px;color:var(--muted)}
+.bat-active:not(.empty):hover{border-color:var(--accent)}
+.bat-active.ko{border-color:#ef4444;background:rgba(239,68,68,.06)}
+.bat-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.bat-img{width:44px;height:61px;object-fit:contain;border-radius:6px;background:var(--sunk);flex:none}
+.bat-nm{flex:1;min-width:0}
+.bat-nm b{display:block;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bat-nm small{color:var(--muted);font-size:12px}
+.hp-bg{height:14px;background:var(--sunk);border-radius:7px;overflow:hidden;margin:4px 0 2px}
+.hp-fill{height:100%;border-radius:7px;transition:width .4s cubic-bezier(.34,1.56,.64,1)}
+.hp-lbl{display:flex;justify-content:space-between;font:700 12px var(--display);font-variant-numeric:tabular-nums}
+.conds{display:flex;gap:5px;flex-wrap:wrap;min-height:22px}
+.cond-chip{border:0;border-radius:999px;padding:3px 9px;font:600 11px var(--body);cursor:pointer;opacity:.3;transition:opacity .15s}
+.cond-chip.on{opacity:1}
+.dmg-row{display:flex;gap:5px;flex-wrap:wrap}
+.dmg-row button{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 11px;font:700 13px var(--display);cursor:pointer;transition:transform .1s}
+.dmg-row button:active{transform:scale(.9)}
+.heal-btn{color:#22c55e!important;border-color:rgba(34,197,94,.5)!important}
+.ko-btn{color:#ef4444!important;border-color:rgba(239,68,68,.5)!important}
+.bench-row{display:flex;gap:5px}
+.bench-tile{flex:0 0 50px;height:68px;border:1.5px dashed var(--line);border-radius:8px;background:var(--bg);cursor:pointer;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--muted)}
+.bench-tile img{width:100%;height:100%;object-fit:contain;border-radius:6px}
+.bench-tile .bhp{position:absolute;bottom:0;left:0;right:0;height:5px;background:var(--sunk)}
+.bench-tile .bhp-fill{height:100%;border-radius:0 0 6px 6px;transition:width .3s}
+.prizes-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.prizes-row .plbl{font:600 11px var(--display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.prize-card{width:18px;height:26px;border-radius:2px;background:linear-gradient(145deg,#7c3aed,#4c1d95);border:1px solid rgba(255,255,255,.15);cursor:pointer;transition:opacity .2s,transform .15s;box-shadow:0 2px 4px rgba(0,0,0,.4);flex-shrink:0}
+.prize-card.taken{opacity:.15;transform:scale(.75)}
+.bat-sep{text-align:center;padding:5px 0;font:400 11px var(--display);letter-spacing:.2em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px}
+.bat-sep::before,.bat-sep::after{content:'';flex:1;height:1px;background:var(--line)}
+.battle-log{background:var(--sunk);border-radius:10px;padding:8px 10px;max-height:88px;overflow-y:auto;font-size:11px;display:flex;flex-direction:column;gap:2px}
+.battle-log .elog{color:var(--muted);line-height:1.45}
+.battle-log .elog b{color:var(--fg)}
+.picker-list{display:flex;flex-direction:column;gap:6px;max-height:52vh;overflow-y:auto}
 /* Profil utilisateur */
 .avatar-btn{border:2px solid var(--line);background:var(--surface);border-radius:50%;width:38px;height:38px;padding:2px;overflow:hidden;flex-shrink:0;display:grid;place-items:center;cursor:pointer;transition:border-color .15s}
 .avatar-btn:hover{border-color:var(--accent)}
@@ -238,6 +290,7 @@ nav.tabs .scan .orb svg{width:24px;height:24px;color:#fff}
   <button data-tab="series"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="9" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Séries</button>
   <button data-tab="scan" class="scan" aria-label="Scanner"><span class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3.2"/></svg></span></button>
   <button data-tab="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Chercher</button>
+  <button data-tab="jeu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="3"/><path d="M8 12h4M10 10v4"/><circle cx="16" cy="12" r="1" fill="currentColor"/><circle cx="18" cy="10" r="1" fill="currentColor"/></svg>Decks</button>
   <button data-tab="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6M10 3v7l-4 9a1 1 0 0 0 .9 1.5h10.2a1 1 0 0 0 .9-1.5L14 10V3"/><path d="M7.5 15.5h9"/></svg>Prof. Chen</button>
 </nav>
 <input type="file" id="photo-gallery" accept="image/*" multiple hidden>
@@ -253,7 +306,7 @@ const eur = v => v == null || isNaN(v) ? "—" : v.toLocaleString("fr-FR",{style
 const today = () => new Date().toISOString().slice(0,10);
 const VARIANTS = [["normal","Normale"],["reverse","Reverse"],["holo","Holo"],["first","1re édition"]];
 const COND = ["Mint","Near Mint","Excellent","Good","Light Played","Played","Poor"];
-const GRADERS = ["","PCA","PSA","CGC","BGS","Collect Aura"];
+const GRADERS = ["PSA","PCA","BGS","CGC","Beckett","Collect Aura"];
 
 /* Table des codes imprimés sur les cartes → identifiants TCGdex */
 const PRINT_CODE = {
@@ -288,7 +341,11 @@ const S = {
   priceAlerts: [],        // [{cardId,name,oldPrice,newPrice,pct,date,dismissed}]
   gradeReco: null,        // null | {loading:true} | {items:[...]} | {error:"..."}
   buyAdvice: null,        // null | {loading:true} | {items:[...]} | {error:"..."}
-  profile: { avatar: 'pikachu', displayName: '', preferredGrader: 'PSA' },
+  profile: { avatar: 'pikachu', displayName: '', preferredGrader: 'PSA', player2: 'Joueur 2' },
+  decks: {},
+  deckAdvice: null,
+  energyStock: {},
+  battleState: null,
   listTab: "wish",
   openSeries: new Set(JSON.parse(lsGet("openSeries") || "[]")),
   setView: null, setFilter: "all", setCatFilter: "all",
@@ -342,6 +399,9 @@ const Store = {
   loadLocal(){
     try { S.coll = JSON.parse(lsGet("coll") || "{}"); S.history = JSON.parse(lsGet("hist") || "[]"); S.cardPriceHist = JSON.parse(lsGet("ctcg_cph") || "{}"); S.priceAlerts = JSON.parse(lsGet("ctcg_alerts") || "[]"); } catch { S.coll = {}; S.history = []; S.cardPriceHist = {}; S.priceAlerts = []; }
     try { const p = JSON.parse(lsGet("profile") || "null"); if (p) S.profile = {...S.profile, ...p}; } catch {}
+    try { S.decks = JSON.parse(lsGet("decks") || "{}"); } catch { S.decks = {}; }
+    try { const def = Object.fromEntries(ENERGY_TYPES.map(e=>[e.k,20])); const saved = JSON.parse(lsGet("energy")||"null"); S.energyStock = saved ? {...def,...saved} : def; } catch { S.energyStock = Object.fromEntries(ENERGY_TYPES.map(e=>[e.k,20])); }
+    try { S.battleState = JSON.parse(lsGet("battle") || "null"); } catch { S.battleState = null; }
     render(); autoRefreshIfStale();
   },
   async save(card){
@@ -574,14 +634,15 @@ function render(){
   const pavt = $("#profile-avatar"); if (pavt) pavt.src = avatarUrl(S.profile.avatar);
   document.querySelectorAll(".lang button").forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === S.lang));
   const app = $("#app");
-  const titles = {home:"Ma collection", series:"Séries", scan:"Scanner", search:"Chercher", lists:"Prof. Chen", set: S.setView ? (S.catalog?.sets?.[S.setView]?.name || "Extension") : ""};
-  $("#title").textContent = titles[S.tab];
+  const titles = {home:"Ma collection", series:"Séries", scan:"Scanner", search:"Chercher", lists:"Prof. Chen", jeu: S.battleState ? "⚔️ Combat en cours" : "Mes decks", set: S.setView ? (S.catalog?.sets?.[S.setView]?.name || "Extension") : ""};
+  $("#title").textContent = titles[S.tab] || "";
   if (S.tab === "home") app.innerHTML = viewHome();
   else if (S.tab === "series") app.innerHTML = viewSeries();
   else if (S.tab === "set") viewSet(app);
   else if (S.tab === "scan") { app.innerHTML = viewScan(); }
   else if (S.tab === "search") { if (!$("#q")) app.innerHTML = viewSearch(); }
   else if (S.tab === "lists") app.innerHTML = viewLists();
+  else if (S.tab === "jeu") app.innerHTML = S.battleState ? viewBattle() : viewDecks();
 }
 
 function sparkline(points){
@@ -798,7 +859,17 @@ const AVATARS = [
   {key:"bulbasaur",name:"Bulbizarre",id:1},{key:"squirtle",name:"Carapuce",id:7},
   {key:"charmander",name:"Salamèche",id:4},{key:"jigglypuff",name:"Rondoudou",id:39},
 ];
-const GRADERS = ["PSA","PCA","BGS","CGC","Beckett"];
+const ENERGY_TYPES = [
+  {k:"Feu",i:"🔥",c:"#f97316"},{k:"Eau",i:"💧",c:"#3b82f6"},{k:"Plante",i:"🌿",c:"#22c55e"},
+  {k:"Foudre",i:"⚡",c:"#eab308"},{k:"Psy",i:"🔮",c:"#a855f7"},{k:"Combat",i:"🥊",c:"#f97316"},
+  {k:"Obscurité",i:"🌑",c:"#6366f1"},{k:"Métal",i:"⚙️",c:"#94a3b8"},{k:"Fée",i:"🎀",c:"#ec4899"},
+  {k:"Dragon",i:"🐉",c:"#8b5cf6"},{k:"Incolore",i:"⭐",c:"#d97706"},
+];
+const CONDITIONS = [
+  {k:"Empoisonné",i:"💜",bg:"rgba(168,85,247,.8)"},{k:"Brûlé",i:"🔥",bg:"rgba(249,115,22,.8)"},
+  {k:"Confus",i:"😵",bg:"rgba(234,179,8,.8)"},{k:"Endormi",i:"💤",bg:"rgba(59,130,246,.8)"},
+  {k:"Paralysé",i:"❄️",bg:"rgba(148,163,184,.8)"},
+];
 function avatarUrl(key){ const a = AVATARS.find(x=>x.key===key)||AVATARS[0]; return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${a.id}.png`; }
 function saveProfile(){ lsSet("profile", JSON.stringify(S.profile)); }
 function matchCat(c, cf){
@@ -942,6 +1013,362 @@ function _aiItemList(items, cols){
     </span>
     <span class="p">${x.right||""}</span>
   </button>`).join("")}</div>`;
+}
+
+/* ══════════════════════ DECK BUILDER ══════════════════════ */
+
+function hpColor(pct){ return pct > .5 ? "#22c55e" : pct > .25 ? "#f59e0b" : "#ef4444"; }
+
+function saveDeckState(){ lsSet("decks", JSON.stringify(S.decks)); }
+function saveEnergyState(){ lsSet("energy", JSON.stringify(S.energyStock)); }
+function saveBattleState(){ if (S.battleState) lsSet("battle", JSON.stringify(S.battleState)); else { try { localStorage.removeItem("ctcg_battle"); } catch {} } }
+
+function battleLog(msg){ if (!S.battleState) return; S.battleState.log.unshift({t:S.battleState.turn, msg}); if (S.battleState.log.length>30) S.battleState.log.pop(); }
+
+function endBattle(){ if (!confirm("Terminer le combat ?")) return; S.battleState=null; saveBattleState(); render(); }
+
+function nextTurn(){
+  S.battleState.turn++;
+  // Auto-apply poison/burn end of turn
+  [0,1].forEach(pi => {
+    const p = S.battleState.players[pi];
+    if (!p.active) return;
+    if (p.active.conditions.includes("Empoisonné")) { p.active.hp = Math.max(0, p.active.hp-10); battleLog(`T${S.battleState.turn} <b>${p.name}</b> — ${p.active.name} perd 10 PV (poison)`); }
+    if (p.active.conditions.includes("Brûlé")) { p.active.hp = Math.max(0, p.active.hp-20); battleLog(`T${S.battleState.turn} <b>${p.name}</b> — ${p.active.name} perd 20 PV (brûlure)`); }
+  });
+  saveBattleState(); render();
+}
+
+function getSlot(pIdx, slot){
+  const p = S.battleState.players[pIdx];
+  return slot === "active" ? p.active : p.bench[parseInt(slot)];
+}
+function setSlot(pIdx, slot, val){
+  const p = S.battleState.players[pIdx];
+  if (slot === "active") p.active = val; else p.bench[parseInt(slot)] = val;
+}
+
+function applyDmg(pIdx, slot, dmg){
+  const t = getSlot(pIdx, slot); if (!t) return;
+  t.hp = Math.max(0, t.hp - dmg);
+  battleLog(`T${S.battleState.turn} <b>${S.battleState.players[pIdx].name}</b> — ${t.name} reçoit ${dmg} dégâts (${t.hp}/${t.maxHp} PV)`);
+  saveBattleState(); render();
+}
+
+function healPoke(pIdx, slot, amount){
+  const t = getSlot(pIdx, slot); if (!t) return;
+  t.hp = Math.min(t.maxHp, t.hp + amount);
+  battleLog(`T${S.battleState.turn} <b>${S.battleState.players[pIdx].name}</b> — ${t.name} soigne ${amount} PV (${t.hp}/${t.maxHp})`);
+  saveBattleState(); render();
+}
+
+function toggleCond(pIdx, condKey){
+  const p = S.battleState.players[pIdx]; if (!p.active) return;
+  const c = p.active.conditions; const i = c.indexOf(condKey);
+  if (i >= 0) { c.splice(i,1); battleLog(`T${S.battleState.turn} <b>${p.name}</b> — ${p.active.name} : ${condKey} retiré`); }
+  else { c.push(condKey); battleLog(`T${S.battleState.turn} <b>${p.name}</b> — ${p.active.name} est ${condKey.toLowerCase()}`); }
+  saveBattleState(); render();
+}
+
+function koPoke(pIdx){
+  const p = S.battleState.players[pIdx]; if (!p.active) return;
+  battleLog(`T${S.battleState.turn} 💀 <b>KO!</b> — ${p.name} : ${p.active.name} est mis hors-jeu`);
+  // Move active to discard, bench[0] promotes if exists
+  const next = p.bench.find(b=>b);
+  p.active = null;
+  if (next) { p.active = next; p.bench = p.bench.filter(b=>b!==next); battleLog(`<b>${p.name}</b> envoie ${next.name} au combat`); }
+  saveBattleState(); render();
+}
+
+function takeprize(pIdx){
+  const p = S.battleState.players[pIdx]; if (p.prizes <= 0) return;
+  p.prizes--;
+  if (p.prizes === 0) battleLog(`🏆 <b>${p.name}</b> remporte la partie !`);
+  else battleLog(`T${S.battleState.turn} <b>${p.name}</b> prend une récompense (${p.prizes} restantes)`);
+  saveBattleState(); render();
+}
+
+function openPokePicker(pIdx, slot){
+  const deckId = S.battleState.players[pIdx].deckId;
+  const deckCards = S.decks[deckId]?.cards || [];
+  const cards = deckCards.length ? deckCards
+    : Object.values(S.coll).filter(d=>qty(d)>0).map(d=>({cardId:d.cardId,name:d.name,image:d.image||""}));
+  let sel = null;
+  const scrim = document.createElement("div"); scrim.className = "scrim";
+  const render2 = () => {
+    scrim.innerHTML = `<div class="sheet" style="max-height:88%">
+      <div class="sheet-header"><button class="sheet-close" id="pp-x">✕</button></div>
+      <h2 style="margin:0 0 10px;font-size:15px">Choisir un Pokémon</h2>
+      <input id="pp-q" type="search" placeholder="Rechercher…" style="width:100%;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:9px;padding:8px 12px;font-size:15px;margin-bottom:10px">
+      <div class="picker-list" id="pp-list">
+        ${cards.map(c=>`<button class="item" data-pc="${esc(c.cardId)}|${esc(c.name)}|${esc(c.image||'')}">
+          ${c.image?`<img src="${esc(c.image)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">`:`<span style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:inline-block"></span>`}
+          <span class="t"><b>${esc(c.name)}</b>${sel?.cardId===c.cardId?` <span style="color:var(--accent)">✓</span>`:''}
+          </span>
+        </button>`).join("")}
+      </div>
+      ${sel ? `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+        <label style="font-size:13px;display:block;margin-bottom:6px;font-weight:600">PV maximum de <b>${esc(sel.name)}</b></label>
+        <input id="pp-hp" type="number" value="${sel.maxHp||100}" min="10" max="340" step="10"
+          style="width:100%;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:9px;padding:9px 12px;font-size:16px">
+        <button class="btn primary" id="pp-ok" style="width:100%;margin-top:10px">Envoyer au combat</button>
+      </div>` : `<p class="muted" style="font-size:13px;margin-top:8px">Sélectionne une carte ci-dessus.</p>`}
+    </div>`;
+    scrim.querySelector("#pp-x").onclick = () => scrim.remove();
+    scrim.addEventListener("click", e => { if (e.target===scrim) scrim.remove(); });
+    scrim.querySelector("#pp-q")?.addEventListener("input", e => {
+      const q = e.target.value.toLowerCase();
+      scrim.querySelectorAll("[data-pc]").forEach(b => b.style.display = b.dataset.pc.split("|")[1].toLowerCase().includes(q)?'':'none');
+    });
+    scrim.querySelectorAll("[data-pc]").forEach(btn => btn.onclick = () => {
+      const [cid,nm,img] = btn.dataset.pc.split("|");
+      sel = {cardId:cid, name:nm, image:img, maxHp:100};
+      render2();
+      // Try to auto-load HP
+      loadCard(cid).then(data => {
+        const hp = parseInt(data?.hp)||0;
+        if (hp > 0) { const el = scrim.querySelector("#pp-hp"); if (el) { el.value = hp; sel.maxHp = hp; } }
+      }).catch(()=>{});
+    });
+    scrim.querySelector("#pp-ok")?.onclick = () => {
+      const maxHp = parseInt(scrim.querySelector("#pp-hp").value)||100;
+      const poke = {cardId:sel.cardId, name:sel.name, image:sel.image, hp:maxHp, maxHp, conditions:[]};
+      setSlot(pIdx, slot, poke);
+      if (slot==="active") battleLog(`<b>${S.battleState.players[pIdx].name}</b> envoie <b>${poke.name}</b> au combat`);
+      saveBattleState(); scrim.remove(); render();
+    };
+  };
+  render2();
+  document.body.appendChild(scrim);
+}
+
+function openBattleSetup(deckId){
+  const deckList = Object.values(S.decks);
+  const scrim = document.createElement("div"); scrim.className = "scrim";
+  scrim.innerHTML = `<div class="sheet">
+    <div class="sheet-header"><button class="sheet-close" id="bs-x">✕</button></div>
+    <h2 style="margin:0 0 16px;font-size:16px;font-weight:700">⚔️ Nouveau combat</h2>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <label style="font-size:13px;display:flex;flex-direction:column;gap:5px">Joueur 1 (toi)
+        <input id="bs-n1" type="text" value="${esc(S.profile.displayName||'Thomas')}" style="border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:9px;padding:9px 12px;font-size:15px">
+      </label>
+      <label style="font-size:13px;display:flex;flex-direction:column;gap:5px">Deck de J1
+        <select id="bs-d1" style="border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:9px;padding:9px 12px;font-size:15px">
+          ${deckList.map(d=>`<option value="${esc(d.id)}"${d.id===deckId?' selected':''}>${esc(d.name)}</option>`).join("")}
+          <option value="">Sans deck</option>
+        </select>
+      </label>
+      <hr style="border:0;border-top:1px solid var(--line)">
+      <label style="font-size:13px;display:flex;flex-direction:column;gap:5px">Joueur 2
+        <input id="bs-n2" type="text" value="${esc(S.profile.player2||'Joueur 2')}" style="border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:9px;padding:9px 12px;font-size:15px">
+      </label>
+      <label style="font-size:13px;display:flex;flex-direction:column;gap:5px">Deck de J2
+        <select id="bs-d2" style="border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:9px;padding:9px 12px;font-size:15px">
+          ${deckList.map(d=>`<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}
+          <option value="" selected>Sans deck</option>
+        </select>
+      </label>
+    </div>
+    <button class="btn primary" id="bs-go" style="width:100%;margin-top:16px;font-size:15px">⚔️ Démarrer le combat !</button>
+  </div>`;
+  scrim.querySelector("#bs-x").onclick = () => scrim.remove();
+  scrim.addEventListener("click", e => { if (e.target===scrim) scrim.remove(); });
+  scrim.querySelector("#bs-go").onclick = () => {
+    const n1 = scrim.querySelector("#bs-n1").value.trim() || "Thomas";
+    const n2 = scrim.querySelector("#bs-n2").value.trim() || "Joueur 2";
+    const d1 = scrim.querySelector("#bs-d1").value;
+    const d2 = scrim.querySelector("#bs-d2").value;
+    S.profile.player2 = n2; saveProfile();
+    S.battleState = {
+      players: [
+        {name:n1, deckId:d1, active:null, bench:[], prizes:6, hand:7},
+        {name:n2, deckId:d2, active:null, bench:[], prizes:6, hand:7}
+      ],
+      turn:1, log:[`<b>⚔️ Combat démarré !</b> ${esc(n1)} vs ${esc(n2)}`], startedAt:Date.now()
+    };
+    saveBattleState(); scrim.remove(); render();
+  };
+  document.body.appendChild(scrim);
+}
+
+async function generateDecks(){
+  const cards = Object.values(S.coll).filter(d=>qty(d)>0)
+    .map(d=>({cardId:d.cardId, name:d.name, setId:d.setId, qty:qty(d)}));
+  const energy = ENERGY_TYPES.map(e=>({type:e.k, qty:S.energyStock[e.k]||0})).filter(e=>e.qty>0);
+  if (!cards.length) { S.deckAdvice={error:"Aucune carte dans la collection."}; render(); return; }
+  S.deckAdvice={loading:true}; render();
+  try {
+    const res = await fetch("/api/deck-builder", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({cards, energy})
+    });
+    const data = await res.json();
+    if (!res.ok) S.deckAdvice={error:data.error||"Erreur serveur"};
+    else S.deckAdvice={decks:data.decks||[]};
+  } catch(e) { S.deckAdvice={error:e.message||"Réseau indisponible"}; }
+  render();
+}
+
+function saveDeckFromAdvice(idx){
+  const d = S.deckAdvice?.decks?.[idx]; if (!d) return;
+  const id = "deck_"+ Date.now();
+  // Match card names to collection cardIds
+  const cards = (d.cards||[]).map(c => {
+    const owned = Object.values(S.coll).find(x => normStr(x.name)===normStr(c.name));
+    return {cardId:owned?.cardId||"", name:c.name, image:owned?.image||"", qty:c.qty||1};
+  });
+  S.decks[id] = {id, name:d.name, cards, strategy:d.strategy||"", createdAt:Date.now()};
+  saveDeckState(); toast(`Deck "${d.name}" sauvegardé !`); render();
+}
+
+function deleteDeck(id){
+  if (!confirm(`Supprimer le deck "${S.decks[id]?.name}" ?`)) return;
+  delete S.decks[id]; saveDeckState(); render();
+}
+
+/* ── VIEW : Decks ──────────────────────────────────────── */
+function viewDecks(){
+  const deckList = Object.values(S.decks);
+  const da = S.deckAdvice;
+
+  const energyHtml = `<details style="margin-bottom:18px">
+    <summary style="cursor:pointer;font:600 12px var(--display);letter-spacing:.18em;text-transform:uppercase;color:var(--muted);list-style:none;display:flex;align-items:center;gap:6px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Stock d'énergie
+      <span style="color:var(--fg);font-variant-numeric:tabular-nums">${Object.values(S.energyStock).reduce((a,b)=>a+b,0)} cartes</span>
+    </summary>
+    <div class="energy-grid" style="margin-top:10px">
+      ${ENERGY_TYPES.map(e=>`<div class="energy-cell">
+        <span class="eico">${e.i}</span>
+        <span class="ecnt">${S.energyStock[e.k]||0}</span>
+        <span style="font-size:10px">${e.k}</span>
+        <div class="ectrl">
+          <button data-act="energyadj" data-etype="${e.k}" data-delta="-1">−</button>
+          <button data-act="energyadj" data-etype="${e.k}" data-delta="1">+</button>
+        </div>
+      </div>`).join("")}
+    </div>
+  </details>`;
+
+  const decksHtml = deckList.length
+    ? `<div class="deck-grid">${deckList.map(d=>`<div class="deck-card">
+        <h3>🃏 ${esc(d.name)}</h3>
+        <p class="dstrat">${esc(d.strategy||"Aucune description.")}</p>
+        <p class="dmeta">${d.cards.length} types de cartes · créé ${new Date(d.createdAt).toLocaleDateString("fr-FR")}</p>
+        <div class="dactions">
+          <button class="btn primary" data-act="startbattle" data-deckid="${esc(d.id)}" style="font-size:12px">⚔️ Combattre</button>
+          <button class="btn" data-act="deldeck" data-deckid="${esc(d.id)}" style="font-size:12px;color:#ef4444;border-color:#ef4444">Supprimer</button>
+        </div>
+      </div>`).join("")}</div>`
+    : `<p class="muted" style="font-size:13px;margin-bottom:16px">Aucun deck sauvegardé. Génère-en un avec l'IA ci-dessous !</p>`;
+
+  const aiHtml = da?.loading
+    ? `<p class="muted"><span class="spinner"></span> Gemini analyse ta collection…</p>`
+    : da?.error
+    ? `<div class="note" style="font-size:13px">Erreur : ${esc(da.error)}</div>`
+    : da?.decks?.length
+    ? `<div style="display:flex;flex-direction:column;gap:14px">${da.decks.map((d,i)=>`<div class="deck-card">
+        <h3>✨ ${esc(d.name)}</h3>
+        <p class="dstrat">${esc(d.strategy)}</p>
+        ${d.cards?.length?`<details style="margin-top:4px"><summary style="font-size:12px;cursor:pointer;color:var(--accent)">Voir la liste (${d.cards.length} cartes)</summary>
+          <div style="margin-top:8px;font-size:12px;display:flex;flex-direction:column;gap:3px">
+            ${d.cards.map(c=>`<span>${c.qty}× ${esc(c.name)}</span>`).join("")}
+          </div></details>`:``}
+        ${d.missingCards?.length?`<details style="margin-top:4px"><summary style="font-size:12px;cursor:pointer;color:#f59e0b">⚠️ ${d.missingCards.length} carte(s) manquante(s)</summary>
+          <div style="margin-top:8px;font-size:12px;display:flex;flex-direction:column;gap:3px">
+            ${d.missingCards.map(c=>`<span>• ${c.qty}× ${esc(c.name)} — <span style="color:var(--muted)">${esc(c.reason||"")}</span></span>`).join("")}
+          </div></details>`:``}
+        <div class="dactions" style="margin-top:6px">
+          <button class="btn primary" data-act="savedeck" data-didx="${i}" style="font-size:12px">💾 Sauvegarder ce deck</button>
+        </div>
+      </div>`).join("")}</div>`
+    : ``;
+
+  return `${energyHtml}
+  <h2 style="margin:0 0 10px;display:flex;align-items:center;justify-content:space-between">
+    <span>Mes decks</span>
+    <button class="btn" data-act="newdeck" style="font-size:12px">+ Nouveau deck</button>
+  </h2>
+  ${decksHtml}
+  <h2 style="margin:18px 0 10px;display:flex;align-items:center;justify-content:space-between">
+    <span>✨ Decks suggérés par l'IA</span>
+    <button class="btn primary" data-act="gendecks" style="font-size:12px">Générer</button>
+  </h2>
+  ${aiHtml || `<p class="muted" style="font-size:13px">Clique sur "Générer" pour que Gemini compose des decks depuis ta collection.</p>`}`;
+}
+
+/* ── VIEW : Battle assistant ───────────────────────────── */
+function renderPlayerArea(p, pIdx){
+  const aHtml = !p.active
+    ? `<div class="bat-active empty" data-act="openpoke" data-pidx="${pIdx}" data-slot="active">+ Placer un Pokémon actif</div>`
+    : (() => {
+        const pct = p.active.hp / p.active.maxHp;
+        const ko = p.active.hp === 0;
+        return `<div class="bat-active${ko?' ko':''}">
+          <div class="bat-head">
+            ${p.active.image?`<img class="bat-img" src="${esc(p.active.image)}/low.webp" alt="" onerror="imgFb(this)">`:`<div class="bat-img" style="display:flex;align-items:center;justify-content:center;font-size:24px">🎴</div>`}
+            <div class="bat-nm">
+              <b>${esc(p.active.name)}</b>
+              <small>${p.active.hp}/${p.active.maxHp} PV${ko?' · 💀 KO':''}</small>
+            </div>
+            <button class="iconbtn" data-act="openpoke" data-pidx="${pIdx}" data-slot="active" style="font-size:11px;padding:0 8px;height:28px">↩</button>
+          </div>
+          <div class="hp-bg"><div class="hp-fill" style="width:${Math.round(pct*100)}%;background:${hpColor(pct)}"></div></div>
+          <div class="hp-lbl"><span>PV</span><span style="color:${hpColor(pct)}">${Math.round(pct*100)} %</span></div>
+          <div class="conds" style="margin-top:4px">
+            ${CONDITIONS.map(c=>`<button class="cond-chip${p.active.conditions.includes(c.k)?' on':''}" style="background:${p.active.conditions.includes(c.k)?c.bg:'var(--sunk)'}"
+              data-act="togglecond" data-pidx="${pIdx}" data-cond="${c.k}">${c.i} ${c.k}</button>`).join("")}
+          </div>
+        </div>`;
+      })();
+
+  const dmgRow = p.active ? `<div class="dmg-row">
+    <span style="font-size:11px;color:var(--muted);font-weight:600;align-self:center">Dégâts</span>
+    ${[10,30,50,90].map(n=>`<button data-act="appdmg" data-pidx="${pIdx}" data-slot="active" data-dmg="${n}">−${n}</button>`).join("")}
+    <button data-act="custdmg" data-pidx="${pIdx}" data-slot="active">−?</button>
+    <button class="heal-btn" data-act="healpoke" data-pidx="${pIdx}" data-slot="active" data-heal="30">+30 ❤️</button>
+    ${p.active?.hp===0 ? `<button class="ko-btn" data-act="kopoke" data-pidx="${pIdx}">KO 💀</button>` : ''}
+  </div>` : '';
+
+  const bench = Array.from({length:5}, (_,i) => {
+    const b = p.bench[i];
+    if (!b) return `<div class="bench-tile" data-act="openpoke" data-pidx="${pIdx}" data-slot="${i}" title="Banc ${i+1}">＋</div>`;
+    const bp = b.hp/b.maxHp;
+    return `<div class="bench-tile" data-act="openpoke" data-pidx="${pIdx}" data-slot="${i}" title="${b.name}">
+      ${b.image?`<img src="${esc(b.image)}/low.webp" alt="" onerror="imgFb(this)">`:`<span style="font-size:11px;text-align:center;padding:2px;color:var(--fg)">${esc(b.name.split(" ")[0])}</span>`}
+      <div class="bhp"><div class="bhp-fill" style="width:${Math.round(bp*100)}%;background:${hpColor(bp)}"></div></div>
+    </div>`;
+  }).join("");
+
+  const prizes = Array.from({length:6}, (_,i) =>
+    `<div class="prize-card${i>=p.prizes?' taken':''}" data-act="takeprize" data-pidx="${pIdx}" title="Récompense ${i+1}"></div>`
+  ).join("");
+
+  return `<div class="battle-player" style="--p:${pIdx}">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+      <b style="font-size:15px">${esc(p.name)}</b>
+      <div class="prizes-row"><span class="plbl">Récompenses</span>${prizes}</div>
+    </div>
+    <div class="bench-row">${bench}</div>
+    ${aHtml}
+    ${dmgRow}
+  </div>`;
+}
+
+function viewBattle(){
+  const bs = S.battleState;
+  const log = bs.log.slice(0,10).map(e=>`<div class="elog">${e.msg}</div>`).join("");
+  return `<div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div class="bat-sep" style="flex:1">Tour ${bs.turn}</div>
+      <button class="btn" data-act="nextturn" style="font-size:12px">Tour suivant ➜</button>
+      <button class="btn" data-act="endbattle" style="font-size:12px;color:#ef4444">Terminer</button>
+    </div>
+    ${renderPlayerArea(bs.players[1], 1)}
+    <div class="bat-sep">⚔️ VS ⚔️</div>
+    ${renderPlayerArea(bs.players[0], 0)}
+    <div class="battle-log">${log||'<div class="elog">Le combat commence !</div>'}</div>
+  </div>`;
 }
 
 function viewLists(){
@@ -1225,7 +1652,7 @@ async function openCard(id, deck=[], dir=null){
             <option value="done" ${gs==="done"?"selected":""}>✅ Gradée — note reçue</option>
           </select></label>
         <label class="field" id="fw-gco" style="${gs?"":"display:none"}">Chez
-          <select id="f-gco">${GRADERS.filter(x=>x).map(x=>`<option ${gc===x?"selected":""}>${x}</option>`).join("")}</select></label>`;
+          <select id="f-gco">${GRADERS.map(x=>`<option ${gc===x?"selected":""}>${x}</option>`).join("")}</select></label>`;
       })()}
     </div>
     <div class="fields" id="fw-gpend" style="${(doc.grade?.status==="pending")?"":"display:none"}">
@@ -2145,6 +2572,21 @@ document.addEventListener("click", e => {
   }
   const act = b.dataset.act;
   if (act === "openprofile") { openProfile(); return; }
+  if (act === "gendecks") { generateDecks(); return; }
+  if (act === "savedeck") { saveDeckFromAdvice(parseInt(b.dataset.didx||"0")); return; }
+  if (act === "deldeck") { deleteDeck(b.dataset.deckid); return; }
+  if (act === "startbattle") { openBattleSetup(b.dataset.deckid||""); return; }
+  if (act === "newdeck") { const id="deck_"+Date.now(); S.decks[id]={id,name:"Mon deck",cards:[],strategy:"",createdAt:Date.now()}; saveDeckState(); render(); return; }
+  if (act === "endbattle") { endBattle(); return; }
+  if (act === "nextturn") { nextTurn(); return; }
+  if (act === "appdmg") { applyDmg(parseInt(b.dataset.pidx),b.dataset.slot,parseInt(b.dataset.dmg)); return; }
+  if (act === "custdmg") { const v = parseInt(prompt("Dégâts à infliger :")||"0"); if (v>0) applyDmg(parseInt(b.dataset.pidx),b.dataset.slot,v); return; }
+  if (act === "healpoke") { healPoke(parseInt(b.dataset.pidx),b.dataset.slot,parseInt(b.dataset.heal||"10")); return; }
+  if (act === "togglecond") { toggleCond(parseInt(b.dataset.pidx),b.dataset.cond); return; }
+  if (act === "kopoke") { koPoke(parseInt(b.dataset.pidx)); return; }
+  if (act === "takeprize") { takeprize(parseInt(b.dataset.pidx)); return; }
+  if (act === "openpoke") { openPokePicker(parseInt(b.dataset.pidx),b.dataset.slot); return; }
+  if (act === "energyadj") { const k=b.dataset.etype, d=parseInt(b.dataset.delta); S.energyStock[k]=Math.max(0,(S.energyStock[k]||0)+d); saveEnergyState(); render(); return; }
   if (act === "acct") return S.user ? Store.signOut() : Store.signIn();
   if (act === "scan") return go("scan");
   if (act === "startvideo") return startVideoScan();
