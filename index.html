@@ -122,6 +122,12 @@ h2{font:400 14px/1 var(--display);letter-spacing:.22em;text-transform:uppercase;
 .pocket .qty{position:absolute;right:4px;top:4px;font:700 12px var(--display);background:var(--accent);color:var(--accent-fg);padding:2px 7px;border-radius:999px;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .pocket .wish{position:absolute;left:4px;top:4px;font-size:13px;color:var(--accent)}
 .pocket .grd{position:absolute;right:4px;bottom:4px;font:700 10px var(--display);background:var(--gold);color:#1a1200;padding:1px 5px;border-radius:4px}
+.pocket .grd.pend{background:#f97316;color:#fff}
+.alert-bar{background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(34,197,94,.04));border:1px solid rgba(34,197,94,.35);border-radius:14px;padding:12px 14px;margin-bottom:14px;display:flex;flex-direction:column;gap:8px}
+.alert-bar h4{margin:0;font-size:13px;font-weight:600;color:#22c55e;letter-spacing:.05em}
+.alert-item{display:flex;align-items:center;gap:10px;font-size:13px}
+.alert-item .pct{font:700 13px var(--display);color:#22c55e;white-space:nowrap}
+.alert-item button{margin-left:auto;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
 .pocket-add{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.95);color:#04030a;display:grid;place-items:center;font:900 22px/1 var(--body);z-index:10;box-shadow:0 2px 10px rgba(0,0,0,.6);pointer-events:auto;touch-action:manipulation;user-select:none;-webkit-user-select:none;transition:transform .1s,background .1s}
 .pocket-add::before{content:"";position:absolute;inset:-8px;border-radius:50%}
 .pocket-add:active{transform:translateX(-50%) scale(.8);background:#fff}
@@ -266,10 +272,12 @@ const S = {
   coll: {},               // cardId -> doc
   history: [],            // [{d,v}]
   cardPriceHist: {},      // cardId → [{d:"YYYY-MM-DD", v:number}] (90 j max)
+  priceAlerts: [],        // [{cardId,name,oldPrice,newPrice,pct,date,dismissed}]
+  gradeReco: null,        // null | {loading:true} | {items:[...]} | {error:"..."}
+  listTab: "wish",
   openSeries: new Set(JSON.parse(lsGet("openSeries") || "[]")),
   setView: null, setFilter: "all", setCatFilter: "all",
   scan: [], scanBusy: false,
-  listTab: "wish",
 };
 
 function lsGet(k){ try { return localStorage.getItem("ctcg_"+k); } catch { return null; } }
@@ -317,7 +325,7 @@ const Store = {
     toast(ok.length + "/" + ids.length + " carte(s) locale(s) envoyée(s) dans ton compte");
   },
   loadLocal(){
-    try { S.coll = JSON.parse(lsGet("coll") || "{}"); S.history = JSON.parse(lsGet("hist") || "[]"); S.cardPriceHist = JSON.parse(lsGet("ctcg_cph") || "{}"); } catch { S.coll = {}; S.history = []; S.cardPriceHist = {}; }
+    try { S.coll = JSON.parse(lsGet("coll") || "{}"); S.history = JSON.parse(lsGet("hist") || "[]"); S.cardPriceHist = JSON.parse(lsGet("ctcg_cph") || "{}"); S.priceAlerts = JSON.parse(lsGet("ctcg_alerts") || "[]"); } catch { S.coll = {}; S.history = []; S.cardPriceHist = {}; S.priceAlerts = []; }
     render(); autoRefreshIfStale();
   },
   async save(card){
@@ -487,6 +495,8 @@ async function pool(items, n, fn){ let i = 0; await Promise.all(Array.from({leng
 async function refreshPrices(btn){
   const docs = Object.values(S.coll); if (!docs.length) return;
   btn && (btn.disabled = true);
+  // Capture des anciens prix avant mise à jour (pour détection de hausse)
+  const oldPrices = Object.fromEntries(docs.map(d => [d.cardId, d.prices?.normal ?? null]));
   let done = 0;
   await pool(docs, 4, async d => {
     const c = await loadCard(d.cardId); done++;
@@ -502,6 +512,24 @@ async function refreshPrices(btn){
     }
   });
   try { lsSet("ctcg_cph", JSON.stringify(S.cardPriceHist)); } catch {}
+  // Détection de hausses significatives (≥25% ET ≥2€)
+  const newAlerts = [];
+  for (const d of docs) {
+    const old = oldPrices[d.cardId]; if (!old || old < 1) continue;
+    const cur = S.coll[d.cardId]?.prices?.normal; if (!cur) continue;
+    const pct = (cur - old) / old;
+    if (pct >= 0.25 && cur - old >= 2) {
+      const exists = S.priceAlerts.some(a => a.cardId === d.cardId && a.date === today());
+      if (!exists) newAlerts.push({cardId:d.cardId, name:d.name, image:d.image||"", oldPrice:Math.round(old*100)/100, newPrice:Math.round(cur*100)/100, pct:Math.round(pct*100), date:today(), dismissed:false});
+    }
+  }
+  if (newAlerts.length) {
+    S.priceAlerts = [...S.priceAlerts.slice(-50), ...newAlerts];
+    try { lsSet("ctcg_alerts", JSON.stringify(S.priceAlerts)); } catch {}
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      newAlerts.forEach(a => { try { new Notification(`📈 ${a.name} +${a.pct}%`, {body:`${eur(a.oldPrice)} → ${eur(a.newPrice)} · Classeur TCG`, icon:"/icon.svg"}); } catch {} });
+    }
+  }
   const total = totals().value;
   const h = S.history.filter(p => p.d !== today()); h.push({d: today(), v: Math.round(total*100)/100});
   S.history = h.slice(-400); await Store.saveHistory();
@@ -623,7 +651,7 @@ function cardSparkline(pts){
 
 function itemRow(d, right){
   return `<button class="item" data-open="${esc(d.cardId)}"><img src="${esc(d.image ? d.image + "/low.webp" : "")}" alt="" loading="lazy" onerror="imgFb(this)">
-    <span class="t"><b>${esc(d.name)}</b><small>${esc(S.catalog?.sets?.[d.setId]?.name || d.setId)} · ${esc(d.localId)}${d.grade?.co ? " · " + esc(d.grade.co + " " + (d.grade.note||"")) : ""}</small></span>
+    <span class="t"><b>${esc(d.name)}</b><small>${esc(S.catalog?.sets?.[d.setId]?.name || d.setId)} · ${esc(d.localId)}${d.grade?.co ? " · " + (d.grade?.status==="pending" ? `⏳ En cours chez ${esc(d.grade.co)}${d.grade.sentAt?" (envoyée "+esc(new Date(d.grade.sentAt).toLocaleDateString("fr-FR"))+")" :""}` : esc(d.grade.co + " " + (d.grade.note||""))) : ""}</small></span>
     <span class="p">${right}</span></button>`;
 }
 
@@ -636,7 +664,19 @@ function viewHome(){
   const top = Object.values(S.coll).filter(d => qty(d)).map(d => ({d, v: cardValue(d)})).filter(x => x.v).sort((a,b) => b.v - a.v).slice(0, 8);
   const recent = Object.values(S.coll).filter(d => qty(d)).sort((a,b) => (b.addedAt||0) - (a.addedAt||0)).slice(0, 6);
   const empty = !t.uniq;
-  return `
+  const activeAlerts = S.priceAlerts.filter(a => !a.dismissed);
+  const alertBanner = activeAlerts.length ? `<div class="alert-bar">
+    <h4>📈 ${activeAlerts.length} carte${activeAlerts.length>1?"s":""} en hausse</h4>
+    ${activeAlerts.slice(0,5).map(a => `<div class="alert-item">
+      ${a.image ? `<img src="${esc(a.image)}/low.webp" style="width:28px;height:39px;object-fit:cover;border-radius:3px" alt="">` : ""}
+      <span>${esc(a.name)} <span class="muted" style="font-size:11px">${esc(a.date.slice(5))}</span></span>
+      <span class="pct">+${a.pct}%</span>
+      <span class="num" style="font-size:12px">${eur(a.oldPrice)} → ${eur(a.newPrice)}</span>
+      <button data-dismissalert="${esc(a.cardId+":"+a.date)}">✕</button>
+    </div>`).join("")}
+    ${activeAlerts.length > 5 ? `<p class="muted" style="font-size:12px;margin:0">+${activeAlerts.length-5} autres…</p>` : ""}
+  </div>` : "";
+  return `${alertBanner}
   <section class="hero">
     <div class="lbl">Valeur estimée · Cardmarket</div>
     <div class="val">${eur(t.value)}</div>
@@ -654,7 +694,7 @@ function viewHome(){
       <button class="btn" data-act="export" ${empty?"disabled":""}>Exporter (CSV)</button>
       <button class="btn" data-act="clearall" style="color:var(--accent);border-color:var(--accent)">Vider la collection</button>
     </div>
-    ${lastStr ? `<p class="muted" style="font-size:12px;margin:10px 0 0">${lastStr} · Cardmarket via TCGdex</p>` : ""}
+    ${lastStr ? `<p class="muted" style="font-size:12px;margin:10px 0 0">${lastStr} · Cardmarket via TCGdex${typeof Notification !== "undefined" && Notification.permission === "default" ? ` · <button class="btn" data-act="reqnotif" style="font-size:11px;padding:2px 8px;border-radius:999px;display:inline">🔔 Alertes prix</button>` : ""}</p>` : ""}
   </section>
   ${empty ? `<div class="empty"><p style="font-size:16px;color:var(--fg);font-weight:600;margin:0 0 6px">Ton classeur est vide</p><p style="margin:0">Scanne une carte avec le bouton rouge, ou ouvre <b>Séries</b> pour cocher tes cartes à la main.</p></div>` : `
   <h2>Cartes les plus chères</h2>
@@ -785,7 +825,7 @@ async function viewSet(app){
     const d = S.coll[c.id], q = d ? qty(d) : 0;
     return `<button class="pocket ${q?"":"missing"}" data-open="${esc(c.id)}" aria-label="${esc(c.name)} n°${esc(c.localId)}${q?", "+q+" exemplaire(s)":", manquante"}">
       <img src="${esc(c.image ? c.image+"/low.webp" : "/_")}" data-set="${esc(c.setId)}" data-local="${esc(c.localId)}" alt="" loading="lazy" onerror="imgFb(this)">
-      <span class="no">${esc(c.localId)}</span>${q > 1 ? `<span class="qty">×${q}</span>` : ""}${d?.wish && !q ? `<span class="wish">♥</span>` : ""}${d?.grade?.co ? `<span class="grd">${esc(d.grade.co)} ${esc(d.grade.note||"")}</span>` : ""}
+      <span class="no">${esc(c.localId)}</span>${q > 1 ? `<span class="qty">×${q}</span>` : ""}${d?.wish && !q ? `<span class="wish">♥</span>` : ""}${d?.grade?.co ? (d.grade?.status==="pending" ? `<span class="grd pend">⏳${esc(d.grade.co)}</span>` : `<span class="grd">${esc(d.grade.co)} ${esc(d.grade.note||"")}</span>`) : ""}
       <span class="pocket-add" data-quickadd="${esc(c.id)}" aria-label="Ajouter ${esc(c.name)}">+</span>
     </button>`; }).join("")}</div>` : `<div class="empty">Aucune carte pour ce filtre.</div>`}`;
 }
@@ -857,20 +897,90 @@ async function doSearch(q){
 
 function viewLists(){
   const all = Object.values(S.coll);
-  const wish = all.filter(d => d.wish && !qty(d));
-  const dup = all.filter(d => qty(d) > 1);
-  const graded = all.filter(d => d.grade?.co && qty(d));
+  const wish    = all.filter(d => d.wish && !qty(d));
+  const dup     = all.filter(d => qty(d) > 1);
+  const pending = all.filter(d => d.grade?.status === "pending" && qty(d));
+  const graded  = all.filter(d => d.grade?.co && d.grade?.status !== "pending" && qty(d));
   const L = S.listTab;
-  const list = L === "wish" ? wish : L === "dup" ? dup : graded;
-  const sum = L === "wish" ? wish.reduce((s,d) => s + (d.prices?.normal || 0), 0) : L === "dup" ? dup.reduce((s,d) => s + (cardValue(d)||0)/qty(d)*(qty(d)-1), 0) : graded.reduce((s,d) => s + (cardValue(d)||0), 0);
-  const label = {wish:"Coût estimé pour compléter la liste", dup:"Valeur des doubles", graded:"Valeur des cartes gradées"}[L];
-  return `<div class="chips" role="group" style="margin-bottom:12px">
-    <button class="chip" data-list="wish" aria-pressed="${L==="wish"}">♥ Souhaits (${wish.length})</button>
-    <button class="chip" data-list="dup" aria-pressed="${L==="dup"}">Doubles (${dup.length})</button>
-    <button class="chip" data-list="graded" aria-pressed="${L==="graded"}">Gradées (${graded.length})</button></div>
-    <div class="note" style="margin-bottom:12px">${label} : <b class="num" style="color:var(--fg)">${eur(sum)}</b></div>
-    <div class="list">${list.length ? list.map(d => itemRow(d, L==="dup" ? "×"+(qty(d)-1)+" en trop" : eur(L==="wish" ? d.prices?.normal : cardValue(d)))).join("") :
-      `<div class="empty">${L==="wish" ? "Ouvre une carte manquante et touche ♥ pour l'ajouter à ta liste de souhaits." : L==="dup" ? "Pas encore de doubles." : "Indique le grading (PCA, PSA…) dans la fiche d'une carte."}</div>`}</div>`;
+  const sum = L==="wish" ? wish.reduce((s,d)=>s+(d.prices?.normal||0),0) :
+              L==="dup"  ? dup.reduce((s,d)=>s+(cardValue(d)||0)/qty(d)*(qty(d)-1),0) :
+              L==="graded" ? graded.reduce((s,d)=>s+(cardValue(d)||0),0) : 0;
+  const label = {wish:"Coût estimé",dup:"Valeur des doubles",graded:"Valeur des cartes gradées"}[L]||"";
+  const chips = `<div class="chips" role="group" style="margin-bottom:12px">
+    <button class="chip" data-list="wish"    aria-pressed="${L==="wish"}">♥ Souhaits (${wish.length})</button>
+    <button class="chip" data-list="dup"     aria-pressed="${L==="dup"}">Doubles (${dup.length})</button>
+    <button class="chip" data-list="pending" aria-pressed="${L==="pending"}">⏳ En cours (${pending.length})</button>
+    <button class="chip" data-list="graded"  aria-pressed="${L==="graded"}">🏅 Gradées (${graded.length})</button>
+    <button class="chip" data-list="reco"    aria-pressed="${L==="reco"}">✨ IA</button></div>`;
+  if (L === "reco") return chips + viewGradeReco();
+  const list = L==="wish" ? wish : L==="dup" ? dup : L==="pending" ? pending : graded;
+  const rowRight = d => L==="dup" ? "×"+(qty(d)-1)+" en trop" : L==="pending" ? (d.grade?.sentAt ? `envoyée ${new Date(d.grade.sentAt).toLocaleDateString("fr-FR")}` : "en attente") : eur(L==="wish" ? d.prices?.normal : cardValue(d));
+  return chips +
+    (label && sum ? `<div class="note" style="margin-bottom:12px">${label} : <b class="num" style="color:var(--fg)">${eur(sum)}</b></div>` : "") +
+    `<div class="list">${list.length ? list.map(d => itemRow(d, rowRight(d))).join("") :
+      `<div class="empty">${L==="wish" ? "Ouvre une carte manquante et touche ♥ pour l'ajouter à ta liste de souhaits." : L==="dup" ? "Pas encore de doubles." : L==="pending" ? "Marque une carte « En cours » dans sa fiche pour la suivre ici." : "Indique le grading (PCA, PSA…) dans la fiche d'une carte."}</div>`}</div>`;
+}
+
+function viewGradeReco(){
+  const r = S.gradeReco;
+  const threshold = S.gradeThreshold || 15;
+  const header = `<div class="note" style="margin-bottom:12px">
+    <b>Analyse IA des cartes à grader</b>
+    <p class="muted" style="font-size:13px;margin:4px 0 8px">Gemini analyse ta collection et recommande les cartes qui valent la peine d'être gradées (coût ~25-40€ chez PSA, ~15€ chez PCA).</p>
+    <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <label style="font-size:13px">Seuil min. : <input id="grade-threshold" type="number" min="5" max="500" step="5" value="${threshold}" style="width:70px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg)"> €</label>
+      <button class="btn primary" data-act="analyzegrade" style="font-size:13px">✨ Analyser avec Gemini</button>
+    </div>
+  </div>`;
+  if (!r) return header + `<p class="muted" style="font-size:13px">Lance l'analyse pour obtenir des recommandations personnalisées.</p>`;
+  if (r.loading) return header + `<p class="muted"><span class="spinner"></span> Analyse en cours…</p>`;
+  if (r.error) return header + `<div class="note">Analyse impossible : ${esc(r.error)}${r.error==="no_key" ? " — configure GEMINI_API_KEY sur Vercel." : ""}</div>`;
+  if (!r.items?.length) return header + `<div class="empty">Aucune carte ne dépasse le seuil ou Gemini n'a pas trouvé de recommandation.</div>`;
+  const cols = {"haute":"#22c55e","moyenne":"#f59e0b","basse":"#94a3b8"};
+  return header + `<div class="list">${r.items.map(x => `<button class="item" data-open="${esc(x.cardId||"")}">
+    ${x.image ? `<img src="${esc(x.image)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">` : `<span style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:block"></span>`}
+    <span class="t"><b>${esc(x.name)}</b>
+      <small style="color:${cols[x.priority]||"var(--muted)"}">${x.priority==="haute"?"⭐ Priorité haute":x.priority==="moyenne"?"👍 Priorité moyenne":"➖ Faible priorité"} · ${esc(x.grader||"PSA")}</small>
+      <small class="muted" style="display:block;margin-top:2px">${esc(x.reason)}</small>
+    </span>
+    <span class="p">${x.multiplier ? `×${x.multiplier}` : ""}</span>
+  </button>`).join("")}</div>`;
+}
+
+async function analyzeForGrading(){
+  const inp = document.getElementById("grade-threshold");
+  const threshold = inp ? (parseFloat(inp.value) || 15) : (S.gradeThreshold || 15);
+  S.gradeThreshold = threshold;
+  // Cartes possédées dont la valeur dépasse le seuil
+  const candidates = Object.values(S.coll)
+    .filter(d => qty(d) && !d.grade?.co)
+    .map(d => ({ cardId:d.cardId, name:d.name, setId:d.setId, value: cardValue(d)||0, image:d.image||"" }))
+    .filter(d => d.value >= threshold)
+    .sort((a,b) => b.value - a.value)
+    .slice(0, 30);
+  if (!candidates.length) {
+    S.gradeReco = { error: `Aucune carte non gradée ne dépasse ${threshold} €.` };
+    render(); return;
+  }
+  S.gradeReco = { loading: true }; render();
+  try {
+    const res = await fetch("/api/grade-analysis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cards: candidates, threshold })
+    });
+    const data = await res.json();
+    if (!res.ok) { S.gradeReco = { error: data.error || "Erreur serveur" }; }
+    else {
+      const items = (data.recommendations || []).map(r => ({
+        ...r,
+        cardId: r.cardId || (candidates.find(c => c.name === r.name)?.cardId || ""),
+        image:  r.image  || (candidates.find(c => c.name === r.name)?.image || "")
+      }));
+      S.gradeReco = { items };
+    }
+  } catch(e) { S.gradeReco = { error: e.message || "Réseau indisponible" }; }
+  render();
 }
 
 /* ---------- fiche carte ---------- */
@@ -946,9 +1056,25 @@ async function openCard(id){
       <label class="field">Prix payé (€)<input id="f-paid" type="number" inputmode="decimal" min="0" step="0.01" value="${doc.paid ?? ""}"></label>
     </div>
     <div class="fields">
-      <label class="field">Gradée chez<select id="f-gco">${GRADERS.map(x => `<option value="${x}" ${(doc.grade?.co||"")===x?"selected":""}>${x || "Non gradée"}</option>`).join("")}</select></label>
+      ${(() => {
+        const gs = doc.grade?.status || (doc.grade?.co ? "done" : "");
+        const gc = doc.grade?.co || "PSA";
+        return `<label class="field">Gradation
+          <select id="f-gstatus">
+            <option value="" ${!gs?"selected":""}>Non gradée</option>
+            <option value="pending" ${gs==="pending"?"selected":""}>⏳ En cours chez…</option>
+            <option value="done" ${gs==="done"?"selected":""}>✅ Gradée — note reçue</option>
+          </select></label>
+        <label class="field" id="fw-gco" style="${gs?"":"display:none"}">Chez
+          <select id="f-gco">${GRADERS.filter(x=>x).map(x=>`<option ${gc===x?"selected":""}>${x}</option>`).join("")}</select></label>`;
+      })()}
+    </div>
+    <div class="fields" id="fw-gpend" style="${(doc.grade?.status==="pending")?"":"display:none"}">
+      <label class="field">Date d'envoi<input id="f-gsentat" type="date" value="${doc.grade?.sentAt||""}"></label>
+    </div>
+    <div class="fields" id="fw-gdone" style="${(doc.grade?.status==="done"||(doc.grade?.co&&!doc.grade?.status))?"":"display:none"}">
       <label class="field">Note<input id="f-gnote" type="text" placeholder="ex. 10, 9.5" value="${esc(doc.grade?.note||"")}"></label>
-      <label class="field">Valeur gradée (€)<input id="f-gval" type="number" inputmode="decimal" min="0" step="1" value="${doc.grade?.value ?? ""}" placeholder="remplace la cote"></label>
+      <label class="field">Valeur gradée (€)<input id="f-gval" type="number" inputmode="decimal" min="0" step="1" value="${doc.grade?.value??""}" placeholder="remplace la cote"></label>
     </div>
     <label class="field" style="margin-top:10px">Note perso<input id="f-note" type="text" value="${esc(doc.note||"")}" placeholder="ex. classeur bleu, page 4"></label>
     <div class="row" style="margin-top:16px;justify-content:space-between">
@@ -958,7 +1084,7 @@ async function openCard(id){
   const commit = () => {
     doc = {...doc, prices, priceSource:"Cardmarket via TCGdex", priceAt: Date.now(), cond: $("#f-cond",scrim).value, lang: $("#f-lang",scrim).value,
       paid: $("#f-paid",scrim).value === "" ? null : +$("#f-paid",scrim).value, note: $("#f-note",scrim).value.trim(),
-      grade: $("#f-gco",scrim).value ? {co: $("#f-gco",scrim).value, note: $("#f-gnote",scrim).value.trim(), value: $("#f-gval",scrim).value === "" ? null : +$("#f-gval",scrim).value} : null};
+      grade: (() => { const gs = $("#f-gstatus",scrim)?.value||"", gc = gs ? ($("#f-gco",scrim)?.value||"") : ""; if (!gs||!gc) return null; if (gs==="pending") return {status:"pending",co:gc,sentAt:$("#f-gsentat",scrim)?.value||""}; return {status:"done",co:gc,note:$("#f-gnote",scrim)?.value?.trim()||"",value:$("#f-gval",scrim)?.value===""?null:+$("#f-gval",scrim)?.value}; })()};
     if (!doc.addedAt && qty(doc)) doc.addedAt = Date.now();
     if (qty(doc) || doc.wish) Store.save(doc); else if (S.coll[id]) Store.remove(id);
   };
@@ -970,7 +1096,16 @@ async function openCard(id){
     else if (t.id === "delbtn") { Store.remove(id); close(); toast("Retirée"); }
     else if (t.id === "okbtn" || t.id === "closebtn") { commit(); close(); }
   });
-  scrim.addEventListener("change", () => { commit(); });
+  scrim.addEventListener("change", e => {
+    if (e.target.id === "f-gstatus") {
+      const v = e.target.value;
+      const fw = id => $("#" + id, scrim);
+      if (fw("fw-gco"))   fw("fw-gco").style.display   = v ? "" : "none";
+      if (fw("fw-gpend")) fw("fw-gpend").style.display = v==="pending" ? "" : "none";
+      if (fw("fw-gdone")) fw("fw-gdone").style.display = v==="done" ? "" : "none";
+    }
+    commit();
+  });
   // Swipe vers le bas pour fermer
   const sheet = scrim.querySelector(".sheet");
   let _ty0 = 0, _tScroll = 0;
@@ -1790,6 +1925,14 @@ document.addEventListener("click", e => {
   if (act === "back") return go("series");
   if (act === "reloadcat") return loadCatalog(true);
   if (act === "tosearch") { go("search"); const q = $("#q"); if (q) { q.value = b.dataset.q; doSearch(b.dataset.q.trim()); } }
+  if (act === "reqnotif") { Notification.requestPermission().then(p => { if (p==="granted") toast("Alertes prix activées 🔔"); render(); }); return; }
+  if (act === "analyzegrade") { analyzeForGrading(); return; }
+  if (b.dataset.dismissalert) {
+    const [cid, date] = b.dataset.dismissalert.split(":");
+    S.priceAlerts = S.priceAlerts.map(a => a.cardId===cid && a.date===date ? {...a, dismissed:true} : a);
+    try { lsSet("ctcg_alerts", JSON.stringify(S.priceAlerts)); } catch {}
+    render(); return;
+  }
 });
 document.addEventListener("input", e => { if (e.target.id === "q") { clearTimeout(searchTimer); const v = e.target.value.trim(); searchTimer = setTimeout(() => doSearch(v), 350); } });
 $("#photo-gallery").addEventListener("change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) scanFiles(files); });
