@@ -120,8 +120,9 @@ h2{font:400 14px/1 var(--display);letter-spacing:.22em;text-transform:uppercase;
 .pocket .qty{position:absolute;right:4px;top:4px;font:700 12px var(--display);background:var(--accent);color:var(--accent-fg);padding:2px 7px;border-radius:999px;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .pocket .wish{position:absolute;left:4px;top:4px;font-size:13px;color:var(--accent)}
 .pocket .grd{position:absolute;right:4px;bottom:4px;font:700 10px var(--display);background:var(--gold);color:#1a1200;padding:1px 5px;border-radius:4px}
-.pocket-add{position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.92);color:#04030a;display:grid;place-items:center;font:900 17px/1 var(--body);z-index:6;box-shadow:0 2px 8px rgba(0,0,0,.55);pointer-events:auto;user-select:none;flex-shrink:0;transition:transform .1s,background .1s}
-.pocket-add:active{transform:translateX(-50%) scale(.85);background:#fff}
+.pocket-add{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.95);color:#04030a;display:grid;place-items:center;font:900 22px/1 var(--body);z-index:10;box-shadow:0 2px 10px rgba(0,0,0,.6);pointer-events:auto;touch-action:manipulation;user-select:none;-webkit-user-select:none;transition:transform .1s,background .1s}
+.pocket-add::before{content:"";position:absolute;inset:-8px;border-radius:50%}
+.pocket-add:active{transform:translateX(-50%) scale(.8);background:#fff}
 
 /* Feuille (sheet) */
 .scrim{position:fixed;inset:0;background:rgba(5,8,14,.55);z-index:20;display:flex;align-items:flex-end;justify-content:center}
@@ -1484,7 +1485,7 @@ document.addEventListener("click", e => {
   if (b.dataset.set) { S.setView = b.dataset.set; S.setFilter = "all"; return go("set"); }
   if (b.dataset.filter) { S.setFilter = b.dataset.filter; return render(); }
   if (b.dataset.list) { S.listTab = b.dataset.list; return render(); }
-  if (b.dataset.open) return openCard(b.dataset.open);
+  if (b.dataset.open && !e.target.closest("[data-quickadd]")) return openCard(b.dataset.open);
   if (b.dataset.pick) { const [i,k,c] = b.dataset.pick.split(":").map(Number); S.scan[i].found[k].sel = c; return render(); }
   if (b.dataset.addall) {
     const i = parseInt(b.dataset.addall); const entry = S.scan[i]; let count = 0;
