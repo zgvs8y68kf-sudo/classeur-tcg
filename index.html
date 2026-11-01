@@ -358,14 +358,30 @@ async function loadCatalog(force){
   if (!force) { try { const c = JSON.parse(lsGet(key) || "null"); if (c && Date.now() - c.at < 3*864e5) { S.catalog = c; buildTotalIndex(); render(); return; } } catch {} }
   S.catalog = null; render();
   try {
-    const series = await j(`${API}/${S.lang}/series`);
+    // Charger les séries FR et EN en parallèle pour ne rien rater (promos, énergies…)
+    const [frSeries, enSeries] = await Promise.all([
+      j(`${API}/${S.lang}/series`).catch(() => []),
+      S.lang !== "en" ? j(`${API}/en/series`).catch(() => []) : Promise.resolve([])
+    ]);
     const out = []; const sets = {};
-    await pool(series, 6, async s => {
+    // 1) Séries de la langue principale
+    await pool(frSeries, 6, async s => {
       try {
         const d = await j(`${API}/${S.lang}/series/${encodeURIComponent(s.id)}`);
         const ss = (d.sets || []).map(x => ({id:x.id, name:x.name, logo:x.logo, symbol:x.symbol, total:x.cardCount?.total||0, official:x.cardCount?.official||x.cardCount?.total||0, serie:s.id}));
         ss.forEach(x => sets[x.id] = x);
-        out.push({id:s.id, name:s.name, logo:s.logo, releaseDate:d.releaseDate || "", order: series.indexOf(s), sets: ss});
+        out.push({id:s.id, name:s.name, logo:s.logo, releaseDate:d.releaseDate || "", order:frSeries.indexOf(s), sets: ss});
+      } catch {}
+    });
+    // 2) Séries EN manquantes (promos, énergies, sets sans traduction FR)
+    const frIds = new Set(frSeries.map(s => s.id));
+    const enOnly = enSeries.filter(s => !frIds.has(s.id));
+    await pool(enOnly, 6, async s => {
+      try {
+        const d = await j(`${API}/en/series/${encodeURIComponent(s.id)}`);
+        const ss = (d.sets || []).map(x => ({id:x.id, name:x.name, logo:x.logo, symbol:x.symbol, total:x.cardCount?.total||0, official:x.cardCount?.official||x.cardCount?.total||0, serie:s.id}));
+        ss.forEach(x => sets[x.id] = x);
+        out.push({id:s.id, name:s.name, logo:s.logo, releaseDate:d.releaseDate || "", order:frSeries.length + enOnly.indexOf(s), sets: ss});
       } catch {}
     });
     out.sort((a,b) => (b.releaseDate||"").localeCompare(a.releaseDate||"") || b.order - a.order);
@@ -532,7 +548,8 @@ function viewSeries(){
   const c = S.catalog;
   if (!c) return `<p class="muted"><span class="spinner"></span> Chargement des séries…</p>`;
   if (c.error) return `<div class="note">Impossible de joindre la base de cartes. Vérifie ta connexion puis <button class="btn" data-act="reloadcat">Réessayer</button></div>`;
-  return c.series.map(s => {
+  return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="iconbtn" data-act="reloadcat" style="font-size:12px;padding:4px 10px;border-radius:20px;border:1px solid var(--line);color:var(--muted)">↻ Actualiser le catalogue</button></div>` +
+  c.series.map(s => {
     const open = S.openSeries.has(s.id);
     const own = s.sets.reduce((n, x) => n + ownedInSet(x.id), 0), tot = s.sets.reduce((n, x) => n + (x.official||0), 0);
     return `<div class="serie ${open?"open":""}"><button data-serie="${esc(s.id)}" aria-expanded="${open}">
