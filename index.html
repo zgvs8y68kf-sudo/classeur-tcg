@@ -758,8 +758,10 @@ async function doSearch(q){
     if ($("#q")?.value.trim() !== q) return;
     const list = (res || []).map(c => ({...c, setId: c.id.slice(0, c.id.lastIndexOf("-"))}));
     box.innerHTML = list.length ? `<div class="binder">${list.slice(0, 120).map(c => { const d = S.coll[c.id], qn = d ? qty(d) : 0;
+      const cinfo = esc(JSON.stringify({name:c.name,setId:c.setId,localId:c.localId,image:c.image||""}));
       return `<button class="pocket ${qn?"":"missing"}" data-open="${esc(c.id)}" aria-label="${esc(c.name)}">${c.image ? `<img src="${esc(c.image)}/low.webp" alt="" loading="lazy">` : `<span class="noimg">${esc(c.name)}</span>`}
-      <span class="no">${esc(S.catalog?.sets?.[c.setId]?.name?.slice(0,14) || c.setId)} ${esc(c.localId)}</span>${qn>1?`<span class="qty">×${qn}</span>`:""}</button>`; }).join("")}</div>
+      <span class="no">${esc(S.catalog?.sets?.[c.setId]?.name?.slice(0,14) || c.setId)} ${esc(c.localId)}</span>${qn>1?`<span class="qty">×${qn}</span>`:""}
+      <span class="pocket-add" data-quickadd="${esc(c.id)}" data-qacinfo="${cinfo}" aria-label="Ajouter ${esc(c.name)}">+</span></button>`; }).join("")}</div>
       <p class="muted" style="font-size:12px">${list.length} résultat(s). Les cartes en gris ne sont pas dans ta collection.</p>` : `<div class="empty">Aucune carte « ${esc(q)} ».</div>`;
   } catch { box.innerHTML = `<div class="note">Recherche impossible pour le moment.</div>`; }
 }
@@ -1603,15 +1605,24 @@ async function exportCsv(){
 }
 
 /* ---------- interactions ---------- */
-function quickAdd(id){
+function quickAdd(id, cinfo){
   const set = S.setCache[S.lang + ":" + S.setView];
-  const c = set?.cards?.find(x => x.id === id);
+  const c = set?.cards?.find(x => x.id === id) || cinfo;
+  const setId = c?.setId || S.setView || id.slice(0, id.lastIndexOf("-"));
   const prev = S.coll[id];
   const doc = prev
     ? {...prev, v:{...prev.v, normal:(prev.v?.normal||0)+1}, wish:false}
-    : {kind:"card",cardId:id,setId:S.setView,name:c?.name||"",localId:c?.localId||"",image:c?.image||"",v:{normal:1},cond:"Near Mint",wish:false,addedAt:Date.now(),lang:S.lang.toUpperCase().slice(0,2)};
+    : {kind:"card",cardId:id,setId,name:c?.name||"",localId:c?.localId||"",image:c?.image||"",v:{normal:1},cond:"Near Mint",wish:false,addedAt:Date.now(),lang:S.lang.toUpperCase().slice(0,2)};
   Store.save(doc);
+  // Mise à jour visuelle locale du badge sans re-render complet
+  const pockets = document.querySelectorAll(`[data-open="${CSS.escape(id)}"]`);
   const total = Object.values(doc.v||{}).reduce((s,v)=>s+(v||0),0);
+  pockets.forEach(p => {
+    p.classList.remove("missing");
+    let qty = p.querySelector(".qty");
+    if (total > 1) { if (!qty) { qty = document.createElement("span"); qty.className = "qty"; p.appendChild(qty); } qty.textContent = "×" + total; }
+    else if (qty) qty.remove();
+  });
   toast((c?.name||"Carte") + " ×" + total);
 }
 function toast(msg){ const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
@@ -1619,7 +1630,7 @@ function go(tab){ S.tab = tab; window.scrollTo(0,0); render(); if (tab === "sear
 
 document.addEventListener("click", e => {
   if (e.target.closest(".scrim")) return;
-  const qa = e.target.closest("[data-quickadd]"); if (qa) { quickAdd(qa.dataset.quickadd); return; }
+  const qa = e.target.closest("[data-quickadd]"); if (qa) { const ci = qa.dataset.qacinfo ? JSON.parse(qa.dataset.qacinfo) : null; quickAdd(qa.dataset.quickadd, ci); return; }
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.tab) return go(b.dataset.tab);
   if (b.dataset.lang && b.dataset.lang !== S.lang) { S.lang = b.dataset.lang; lsSet("lang", S.lang); S.setCache = {}; loadCatalog(); if (S.tab === "search") { $("#app").innerHTML = viewSearch(); } return; }
