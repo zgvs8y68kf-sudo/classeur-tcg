@@ -984,11 +984,11 @@ async function analyzeForGrading(){
 }
 
 /* ---------- fiche carte ---------- */
-async function openCard(id){
+async function openCard(id, deck=[]){
   const scrim = document.createElement("div"); scrim.className = "scrim";
   scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="Fiche carte"><div class="grab"></div><p class="muted"><span class="spinner"></span> Chargement…</p></div>`;
   document.body.appendChild(scrim);
-  const close = () => { scrim.remove(); render(); };
+  const close = () => { document.removeEventListener("keydown", _onKey); scrim.remove(); render(); };
   scrim.addEventListener("click", e => { if (e.target === scrim) close(); });
   const c = await loadCard(id);
   if (!c) { $(".sheet", scrim).innerHTML = `<div class="grab"></div><p>Carte introuvable.</p>`; return; }
@@ -1088,11 +1088,34 @@ async function openCard(id){
     if (!doc.addedAt && qty(doc)) doc.addedAt = Date.now();
     if (qty(doc) || doc.wish) Store.save(doc); else if (S.coll[id]) Store.remove(id);
   };
-  paint();
+  // Navigation dans la série
+  const idx = deck.indexOf(id);
+  const prevId = idx > 0 ? deck[idx-1] : null;
+  const nextId = idx >= 0 && idx < deck.length-1 ? deck[idx+1] : null;
+  const goTo = nid => { commit(); scrim.remove(); document.removeEventListener("keydown", _onKey); openCard(nid, deck); };
+  const _onKey = e => {
+    if (e.key === "ArrowLeft" && prevId) { e.preventDefault(); goTo(prevId); }
+    else if (e.key === "ArrowRight" && nextId) { e.preventDefault(); goTo(nextId); }
+    else if (e.key === "Escape") close();
+  };
+  if (deck.length > 1) document.addEventListener("keydown", _onKey);
+
+  const origPaint = paint;
+  const paintWithNav = () => {
+    origPaint();
+    const hdr = scrim.querySelector(".sheet-header");
+    if (!hdr) return;
+    if (prevId) { const b = document.createElement("button"); b.className = "iconbtn"; b.id = "prevbtn"; b.setAttribute("aria-label","Carte précédente"); b.textContent = "‹"; b.style.cssText = "position:absolute;left:44px;top:10px;font-size:22px;line-height:1"; hdr.appendChild(b); }
+    if (nextId) { const b = document.createElement("button"); b.className = "iconbtn"; b.id = "nextbtn"; b.setAttribute("aria-label","Carte suivante"); b.textContent = "›"; b.style.cssText = "position:absolute;right:8px;top:10px;font-size:22px;line-height:1"; hdr.appendChild(b); }
+  };
+  paintWithNav();
+
   scrim.addEventListener("click", e => {
     const t = e.target.closest("button"); if (!t) return;
-    if (t.dataset.inc || t.dataset.dec) { const k = t.dataset.inc || t.dataset.dec; doc.v = {...doc.v, [k]: Math.max(0, (doc.v?.[k]||0) + (t.dataset.inc ? 1 : -1))}; commit(); paint(); }
-    else if (t.id === "wishbtn") { doc.wish = !doc.wish; commit(); paint(); }
+    if (t.id === "prevbtn") return goTo(prevId);
+    if (t.id === "nextbtn") return goTo(nextId);
+    if (t.dataset.inc || t.dataset.dec) { const k = t.dataset.inc || t.dataset.dec; doc.v = {...doc.v, [k]: Math.max(0, (doc.v?.[k]||0) + (t.dataset.inc ? 1 : -1))}; commit(); paintWithNav(); }
+    else if (t.id === "wishbtn") { doc.wish = !doc.wish; commit(); paintWithNav(); }
     else if (t.id === "delbtn") { Store.remove(id); close(); toast("Retirée"); }
     else if (t.id === "okbtn" || t.id === "closebtn") { commit(); close(); }
   });
@@ -1106,11 +1129,18 @@ async function openCard(id){
     }
     commit();
   });
-  // Swipe vers le bas pour fermer
+  // Swipe vers le bas pour fermer, gauche/droite pour naviguer
   const sheet = scrim.querySelector(".sheet");
-  let _ty0 = 0, _tScroll = 0;
-  sheet.addEventListener("touchstart", e => { _ty0 = e.touches[0].clientY; _tScroll = sheet.scrollTop; }, {passive:true});
-  sheet.addEventListener("touchend", e => { if (_tScroll === 0 && e.changedTouches[0].clientY - _ty0 > 70) close(); });
+  let _tx0 = 0, _ty0 = 0, _tScroll = 0;
+  sheet.addEventListener("touchstart", e => { _tx0 = e.touches[0].clientX; _ty0 = e.touches[0].clientY; _tScroll = sheet.scrollTop; }, {passive:true});
+  sheet.addEventListener("touchend", e => {
+    const dx = e.changedTouches[0].clientX - _tx0;
+    const dy = e.changedTouches[0].clientY - _ty0;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx > 0 && prevId) goTo(prevId);
+      else if (dx < 0 && nextId) goTo(nextId);
+    } else if (_tScroll === 0 && dy > 70) close();
+  });
 }
 
 /* ---------- scan ---------- */
@@ -1882,7 +1912,10 @@ document.addEventListener("click", e => {
   if (b.dataset.filter) { S.setFilter = b.dataset.filter; return render(); }
   if (b.dataset.catfilter) { S.setCatFilter = b.dataset.catfilter; return render(); }
   if (b.dataset.list) { S.listTab = b.dataset.list; return render(); }
-  if (b.dataset.open && !e.target.closest("[data-quickadd]")) return openCard(b.dataset.open);
+  if (b.dataset.open && !e.target.closest("[data-quickadd]")) {
+    const deck = [...document.querySelectorAll("[data-open]")].map(el => el.dataset.open).filter((x,i,a) => x && a.indexOf(x)===i);
+    return openCard(b.dataset.open, deck);
+  }
   if (b.dataset.pick) { const [i,k,c] = b.dataset.pick.split(":").map(Number); S.scan[i].found[k].sel = c; return render(); }
   if (b.dataset.addall) {
     const i = parseInt(b.dataset.addall); const entry = S.scan[i]; let count = 0;
