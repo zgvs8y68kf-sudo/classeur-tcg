@@ -1130,7 +1130,7 @@ function openPokePicker(pIdx, slot){
         if (hp > 0) { const el = scrim.querySelector("#pp-hp"); if (el) { el.value = hp; sel.maxHp = hp; } }
       }).catch(()=>{});
     });
-    scrim.querySelector("#pp-ok")?.onclick = () => {
+    const ppOk = scrim.querySelector("#pp-ok"); if (ppOk) ppOk.onclick = () => {
       const maxHp = parseInt(scrim.querySelector("#pp-hp").value)||100;
       const poke = {cardId:sel.cardId, name:sel.name, image:sel.image, hp:maxHp, maxHp, conditions:[]};
       setSlot(pIdx, slot, poke);
