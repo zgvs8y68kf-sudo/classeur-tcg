@@ -379,7 +379,13 @@ async function loadCatalog(force){
 async function loadSet(id){
   const k = S.lang + ":" + id;
   if (S.setCache[k]) return S.setCache[k];
-  const d = await j(`${API}/${S.lang}/sets/${encodeURIComponent(id)}`);
+  let d;
+  try { d = await j(`${API}/${S.lang}/sets/${encodeURIComponent(id)}`); } catch {}
+  // Fallback EN si le set FR n'a pas de cartes (données manquantes TCGdex)
+  if ((!d || !d.cards?.length) && S.lang !== "en") {
+    try { d = await j(`${API}/en/sets/${encodeURIComponent(id)}`); } catch {}
+  }
+  if (!d) throw new Error("Set introuvable");
   d.cards = (d.cards || []).slice().sort((a,b) => natCmp(a.localId, b.localId));
   return S.setCache[k] = d;
 }
