@@ -617,23 +617,48 @@ function setTile(x){
     </div></button>`;
 }
 
+const RINFO = { // [label FR, ordre]
+  "common":                    ["Commune ●",       1],
+  "uncommon":                  ["Peu commune ◆",   2],
+  "rare":                      ["Rare ★",          3],
+  "rare holo":                 ["Rare Holo ★",     4],
+  "classic collection":        ["Classique ★",     4],
+  "promo":                     ["Promo",           4],
+  "rare promo":                ["Promo ★",         4],
+  "double rare":               ["Double Rare ★★",  5],
+  "rare holo ex":              ["ex ★★",           5],
+  "rare holo v":               ["V ★★",            5],
+  "rare holo gx":              ["GX ★★",           5],
+  "rare holo lv.x":            ["Lv.X ★★",         5],
+  "rare holo star":            ["★ rare holo ★",   5],
+  "rare break":                ["BREAK ★★",        5],
+  "rare prime":                ["Prime ★★",        5],
+  "rare ace":                  ["ACE SPEC ★★",     5],
+  "amazing rare":              ["Amazing Rare ★★", 6],
+  "illustration rare":         ["AR ★",            6],
+  "trainer gallery rare holo": ["Galerie ★★",      6],
+  "radiant rare":              ["Radiant ★★",      7],
+  "ultra rare":                ["Ultra Rare ★★",   7],
+  "rare ultra":                ["Ultra Rare ★★",   7],
+  "rare full art":             ["Full Art ★★",     7],
+  "rare holo vmax":            ["VMAX ★★",         7],
+  "rare holo vstar":           ["VSTAR ★★",        7],
+  "rare rainbow":              ["Rainbow ✦",       8],
+  "rare shiny":                ["Shiny ★★★",       8],
+  "shiny rare":                ["Shiny ★★",        8],
+  "special illustration rare": ["SAR ★★",          8],
+  "rare shiny holo":           ["Shiny Holo ✦",    9],
+  "rare secret":               ["Secrète ✦",       9],
+  "hyper rare":                ["Hyper Rare ✦",    9],
+  "rare legend":               ["LÉGENDE ★★",      7],
+};
+const normStr = s => (s||"").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu,"");
 function matchCat(c, cf){
   if (cf === "all") return true;
-  // Normalise accents (FR: "Énergie"→"energie", "Dresseur"→"dresseur", "Pokémon"→"pokemon")
-  const norm = s => (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
-  const cat = norm(c.category);
-  const rar = norm(c.rarity);
-  const isEnergy  = cat === "energy" || cat === "energie";
-  const isTrainer = cat === "trainer" || cat === "dresseur";
-  const isRare    = rar.startsWith("rare") ||
-    ["holo","ultra","secret","amazing","radiant","illustration","full art","special","hyper","prism","shiny"].some(w => rar.includes(w));
-  const isPromo   = rar.includes("promo");
-  if (cf === "energy")  return isEnergy;
-  if (cf === "trainer") return isTrainer;
-  if (cf === "promo")   return isPromo;
-  if (cf === "rare")    return !isEnergy && !isTrainer && isRare && !isPromo;
-  if (cf === "normal")  return !isEnergy && !isTrainer && !isRare && !isPromo;
-  return true;
+  const cat = normStr(c.category);
+  if (cf === "trainer") return cat === "trainer" || cat === "dresseur";
+  if (cf === "energy")  return cat === "energy"  || cat === "energie";
+  return normStr(c.rarity) === cf; // correspondance exacte sur la rareté normalisée
 }
 async function viewSet(app){
   const id = S.setView, meta = S.catalog?.sets?.[id];
@@ -647,15 +672,22 @@ async function viewSet(app){
         && matchCat(c, cf);
   });
   const own = ownedInSet(id), tot = set.cardCount?.official || meta?.official || set.cards.length;
-  // Compter les cartes disponibles par catégorie pour les badges
-  const counts = {normal:0, rare:0, promo:0, trainer:0, energy:0};
+  // Chips dynamiques : rarités réelles présentes dans le set + Dresseur + Énergie
+  const rarCounts = new Map(); // rarity normalisée → count
+  let trnCnt = 0, eneCnt = 0;
   for (const c of set.cards) {
-    if (matchCat(c,"normal"))  counts.normal++;
-    if (matchCat(c,"rare"))    counts.rare++;
-    if (matchCat(c,"promo"))   counts.promo++;
-    if (matchCat(c,"trainer")) counts.trainer++;
-    if (matchCat(c,"energy"))  counts.energy++;
+    const cat = normStr(c.category);
+    if (cat === "trainer" || cat === "dresseur") { trnCnt++; continue; }
+    if (cat === "energy"  || cat === "energie")  { eneCnt++; continue; }
+    const r = normStr(c.rarity);
+    if (r) rarCounts.set(r, (rarCounts.get(r)||0)+1);
   }
+  const rarChips = [...rarCounts.entries()]
+    .sort((a,b) => (RINFO[a[0]]?.[1]??50) - (RINFO[b[0]]?.[1]??50))
+    .map(([r,n]) => {
+      const lbl = RINFO[r]?.[0] || r.replace(/\b\w/g, c=>c.toUpperCase());
+      return `<button class="chip chip-cat" data-catfilter="${esc(r)}" aria-pressed="${cf===r}">${esc(lbl)} <span class="chip-n">${n}</span></button>`;
+    }).join("");
   app.innerHTML = `
   <div class="toolbar">
     <button class="iconbtn" data-act="back" aria-label="Retour aux séries">← Séries</button>
@@ -665,10 +697,11 @@ async function viewSet(app){
     ${[["all","Toutes"],["own","Possédées"],["miss","Manquantes"],["dup","Doubles"]].map(([k,l]) => `<button class="chip" data-filter="${k}" aria-pressed="${f===k}">${l}</button>`).join("")}
   </div>
   <div class="chips" role="group" aria-label="Filtre type" style="margin-bottom:12px">
-    ${[["all","Tout"],["normal","Commune"],["rare","Rare"],["promo","Promo"],["trainer","Dresseur"],["energy","Énergie"]].map(([k,l]) => {
-      const n = k === "all" ? set.cards.length : (counts[k]||0);
-      return `<button class="chip chip-cat" data-catfilter="${k}" aria-pressed="${cf===k}">${l}${n ? `<span class="chip-n">${n}</span>` : ""}</button>`;
-    }).join("")}
+    <button class="chip chip-cat" data-catfilter="all" aria-pressed="${cf==="all"}">Tout <span class="chip-n">${set.cards.length}</span></button>
+    ${rarChips}
+    ${trnCnt ? `<button class="chip chip-cat" data-catfilter="trainer" aria-pressed="${cf==="trainer"}">Dresseur <span class="chip-n">${trnCnt}</span></button>` : ""}
+    ${eneCnt ? `<button class="chip chip-cat" data-catfilter="energy" aria-pressed="${cf==="energy"}">Énergie <span class="chip-n">${eneCnt}</span></button>` : ""}
+    ${!rarChips && !trnCnt && !eneCnt ? `<span class="muted" style="font-size:12px">Catégories non disponibles pour ce set</span>` : ""}
   </div>
   ${cards.length ? `<div class="binder">${cards.map(c => {
     const d = S.coll[c.id], q = d ? qty(d) : 0;
