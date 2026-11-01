@@ -107,8 +107,10 @@ h2{font:400 14px/1 var(--display);letter-spacing:.22em;text-transform:uppercase;
 /* Classeur (set) */
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
-.chip{border:1px solid var(--line);background:rgba(255,255,255,.05);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:500}
+.chip{border:1px solid var(--line);background:rgba(255,255,255,.05);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:5px}
 .chip[aria-pressed="true"]{background:rgba(255,255,255,.14);color:var(--fg);border-color:rgba(255,255,255,.22)}
+.chip-n{background:rgba(255,255,255,.15);border-radius:99px;padding:1px 7px;font-size:11px;font-weight:700;color:var(--muted)}
+.chip[aria-pressed="true"] .chip-n{background:rgba(255,255,255,.25);color:var(--fg)}
 .binder{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:var(--sunk);border-radius:14px;padding:10px;background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.025) 0,rgba(255,255,255,.025) 1px,transparent 0,transparent 50%),repeating-linear-gradient(-45deg,rgba(255,255,255,.025) 0,rgba(255,255,255,.025) 1px,transparent 0,transparent 50%);background-size:14px 14px}
 @media (min-width:640px){.binder{grid-template-columns:repeat(4,1fr)}}
 @media (min-width:860px){.binder{grid-template-columns:repeat(6,1fr)}}
@@ -264,7 +266,7 @@ const S = {
   coll: {},               // cardId -> doc
   history: [],            // [{d,v}]
   openSeries: new Set(JSON.parse(lsGet("openSeries") || "[]")),
-  setView: null, setFilter: "all",
+  setView: null, setFilter: "all", setCatFilter: "all",
   scan: [], scanBusy: false,
   listTab: "wish",
 };
@@ -604,22 +606,53 @@ function setTile(x){
     </div></button>`;
 }
 
+function matchCat(c, cf){
+  if (cf === "all") return true;
+  const cat = (c.category || "").toLowerCase();
+  const rar = (c.rarity || "").toLowerCase();
+  const isRare = rar.startsWith("rare") || ["holo","ultra","secret","amazing","radiant","illustration","full art","special","hyper"].some(w => rar.includes(w));
+  const isPromo = rar.includes("promo");
+  if (cf === "energy")  return cat === "energy";
+  if (cf === "trainer") return cat === "trainer";
+  if (cf === "promo")   return isPromo;
+  if (cf === "rare")    return cat === "pokemon" && isRare && !isPromo;
+  if (cf === "normal")  return cat === "pokemon" && !isRare && !isPromo;
+  return true;
+}
 async function viewSet(app){
   const id = S.setView, meta = S.catalog?.sets?.[id];
   if (!S.setCache[S.lang + ":" + id]) app.innerHTML = `<p class="muted"><span class="spinner"></span> Chargement de l'extension…</p>`;
   let set; try { set = await loadSet(id); } catch { app.innerHTML = `<div class="note">Extension introuvable dans cette langue.</div>`; return; }
   if (S.tab !== "set" || S.setView !== id) return;
-  const f = S.setFilter;
-  const cards = set.cards.filter(c => { const d = S.coll[c.id], q = d ? qty(d) : 0;
-    return f === "all" || (f === "own" && q) || (f === "miss" && !q) || (f === "dup" && q > 1); });
+  const f = S.setFilter, cf = S.setCatFilter;
+  const cards = set.cards.filter(c => {
+    const d = S.coll[c.id], q = d ? qty(d) : 0;
+    return (f === "all" || (f === "own" && q) || (f === "miss" && !q) || (f === "dup" && q > 1))
+        && matchCat(c, cf);
+  });
   const own = ownedInSet(id), tot = set.cardCount?.official || meta?.official || set.cards.length;
+  // Compter les cartes disponibles par catégorie pour les badges
+  const counts = {normal:0, rare:0, promo:0, trainer:0, energy:0};
+  for (const c of set.cards) {
+    if (matchCat(c,"normal"))  counts.normal++;
+    if (matchCat(c,"rare"))    counts.rare++;
+    if (matchCat(c,"promo"))   counts.promo++;
+    if (matchCat(c,"trainer")) counts.trainer++;
+    if (matchCat(c,"energy"))  counts.energy++;
+  }
   app.innerHTML = `
   <div class="toolbar">
     <button class="iconbtn" data-act="back" aria-label="Retour aux séries">← Séries</button>
     <span class="num" style="font-weight:700">${own}/${tot}</span><span class="muted" style="font-size:13px">${set.cards.length > tot ? `(+${set.cards.length - tot} secrètes)` : ""}</span>
   </div>
-  <div class="chips" role="group" aria-label="Filtre" style="margin-bottom:12px">
+  <div class="chips" role="group" aria-label="Filtre collection" style="margin-bottom:6px">
     ${[["all","Toutes"],["own","Possédées"],["miss","Manquantes"],["dup","Doubles"]].map(([k,l]) => `<button class="chip" data-filter="${k}" aria-pressed="${f===k}">${l}</button>`).join("")}
+  </div>
+  <div class="chips" role="group" aria-label="Filtre type" style="margin-bottom:12px">
+    ${[["all","Tout"],["normal","Commune"],["rare","Rare"],["promo","Promo"],["trainer","Dresseur"],["energy","Énergie"]].map(([k,l]) => {
+      const n = k === "all" ? set.cards.length : (counts[k]||0);
+      return `<button class="chip chip-cat" data-catfilter="${k}" aria-pressed="${cf===k}">${l}${n ? `<span class="chip-n">${n}</span>` : ""}</button>`;
+    }).join("")}
   </div>
   ${cards.length ? `<div class="binder">${cards.map(c => {
     const d = S.coll[c.id], q = d ? qty(d) : 0;
@@ -1542,8 +1575,9 @@ document.addEventListener("click", e => {
   if (b.dataset.tab) return go(b.dataset.tab);
   if (b.dataset.lang && b.dataset.lang !== S.lang) { S.lang = b.dataset.lang; lsSet("lang", S.lang); S.setCache = {}; loadCatalog(); if (S.tab === "search") { $("#app").innerHTML = viewSearch(); } return; }
   if (b.dataset.serie) { const id = b.dataset.serie; S.openSeries.has(id) ? S.openSeries.delete(id) : S.openSeries.add(id); lsSet("openSeries", JSON.stringify([...S.openSeries])); return render(); }
-  if (b.dataset.set) { S.setView = b.dataset.set; S.setFilter = "all"; return go("set"); }
+  if (b.dataset.set) { S.setView = b.dataset.set; S.setFilter = "all"; S.setCatFilter = "all"; return go("set"); }
   if (b.dataset.filter) { S.setFilter = b.dataset.filter; return render(); }
+  if (b.dataset.catfilter) { S.setCatFilter = b.dataset.catfilter; return render(); }
   if (b.dataset.list) { S.listTab = b.dataset.list; return render(); }
   if (b.dataset.open && !e.target.closest("[data-quickadd]")) return openCard(b.dataset.open);
   if (b.dataset.pick) { const [i,k,c] = b.dataset.pick.split(":").map(Number); S.scan[i].found[k].sel = c; return render(); }
