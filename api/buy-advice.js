@@ -61,7 +61,7 @@ JSON UNIQUEMENT :
     const timer = setTimeout(() => ctrl.abort(), 25000);
     let gemRes = null, lastErr = "";
     try {
-      const models = ["gemini-2.5-flash-lite","gemini-2.5-flash","gemini-2.0-flash","gemini-1.5-flash"];
+      const models = ["gemini-2.5-flash","gemini-2.0-flash","gemini-2.0-flash-lite","gemini-1.5-flash"];
       const races = models.map(model =>
         fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
           { method:"POST", headers:{"Content-Type":"application/json"}, body:payload, signal:ctrl.signal }

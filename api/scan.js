@@ -47,8 +47,8 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
     let gemRes = null, lastErr = "";
     try {
       const models = [
-        "gemini-2.5-flash-lite",   // Lite GA (mai 2026) — optimisé vitesse/coût
-        "gemini-2.5-flash",   // autre lite
+        "gemini-2.5-flash",   // Lite GA (mai 2026) — optimisé vitesse/coût
+        "gemini-2.0-flash-lite",   // autre lite
         "gemini-2.0-flash",
         "gemini-1.5-flash"
       ];

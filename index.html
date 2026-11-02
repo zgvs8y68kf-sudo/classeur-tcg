@@ -389,11 +389,12 @@ const Store = {
         this.uid = user ? user.uid : null; S.user = user;
         if (!user) { this.mode = "local"; this.loadLocal(); return; }
         this.mode = "db";
-        // Decks, energies et état de combat restent en localStorage même en mode Firebase
+        // Données locales non synchronisées sur Firebase — chargement manuel depuis localStorage
         try { S.decks = JSON.parse(lsGet("decks") || "{}"); } catch { S.decks = {}; }
         try { const def = Object.fromEntries(ENERGY_TYPES.map(e=>[e.k,20])); const saved = JSON.parse(lsGet("energy")||"null"); S.energyStock = saved ? {...def,...saved} : def; } catch {}
         try { S.battleState = JSON.parse(lsGet("battle") || "null"); } catch { S.battleState = null; }
         try { S.deckEnergyFilter = JSON.parse(lsGet("deckEF") || "[]"); } catch { S.deckEnergyFilter = []; }
+        try { const p = JSON.parse(lsGet("profile") || "null"); if (p) S.profile = {...S.profile, ...p}; } catch {}
         this.migrateLocal();
         this.unsub = fs.onSnapshot(fs.collection(db, "users", user.uid, "cards"), snap => {
           const coll = {}; snap.forEach(d => { const x = d.data(); if (x && x.cardId) coll[x.cardId] = x; });
