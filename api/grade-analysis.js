@@ -47,10 +47,10 @@ Inclus seulement les cartes rentables à grader. Maximum 12 recommandations, ord
     let gemRes = null, lastErr = "";
     try {
       const models = [
-        "gemini-3.1-flash-lite",
-        "gemini-3.5-flash-lite",
-        "gemini-3.6-flash",
-        "gemini-3.8-flash"
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash"
       ];
       const races = models.map(model =>
         fetch(
