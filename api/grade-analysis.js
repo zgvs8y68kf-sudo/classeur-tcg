@@ -46,17 +46,17 @@ Inclus seulement les cartes rentables à grader. Maximum 12 recommandations, ord
     const timer = setTimeout(() => ctrl.abort(), 8000);
     let gemRes = null, lastErr = "";
     try {
-      const models = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash"
+      const endpoints = [
+        { m:"gemini-2.5-flash", v:"v1beta" },
+        { m:"gemini-2.0-flash", v:"v1beta" },
+        { m:"gemini-1.5-flash", v:"v1" },
+        { m:"gemini-1.5-flash-8b", v:"v1" },
       ];
-      const races = models.map(model =>
+      const races = endpoints.map(({m,v}) =>
         fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+          `https://generativelanguage.googleapis.com/${v}/models/${m}:generateContent?key=${key}`,
           { method: "POST", headers: { "Content-Type": "application/json" }, body: payload, signal: ctrl.signal }
-        ).then(r => r.ok ? r : Promise.reject({ status: r.status, model }))
+        ).then(r => r.ok ? r : Promise.reject({ status: r.status, model: m }))
       );
       gemRes = await Promise.any(races);
     } catch(e) {
