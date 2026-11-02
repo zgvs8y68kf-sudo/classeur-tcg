@@ -115,38 +115,46 @@ JSON UNIQUEMENT (pas de texte avant/après) :
       return false;
     }
 
-    function hasUnownedPokemon(d) {
-      for (const c of d.cards || []) {
-        if (!c.isPokemon) continue;
-        // Owned mais cardId inconnu
-        if (c.owned) {
-          const byId   = c.cardId ? ownedById.has(c.cardId) : false;
-          const byName = ownedByName.has(norm(c.name));
-          if (!byId && !byName) return true; // Prétend posséder une carte absente
+    // Normalise un deck : résout les cardIds réels, marque owned:false si absent
+    function normalizeCards(rawCards) {
+      return (rawCards || []).map(c => {
+        const name = String(c.name||"").trim().slice(0,60);
+        const qty  = Math.min(60, Math.max(1, parseInt(c.qty)||1));
+        const isPokemon = !!c.isPokemon;
+        // Résolution : cardId exact d'abord, puis recherche par nom normalisé
+        let real = c.cardId ? ownedById.get(String(c.cardId).trim()) : null;
+        if (!real) real = ownedByName.get(norm(name));
+        if (real) {
+          return { cardId: real.cardId, name: real.name, qty, owned: true, isPokemon };
         }
-      }
-      return false;
+        // Carte absente de la collection
+        return { cardId: "", name, qty, owned: false, isPokemon };
+      });
+    }
+
+    function hasUnownedPokemon(normalizedCards) {
+      return normalizedCards.some(c => c.isPokemon && !c.owned);
     }
 
     const decks = (result.decks || [])
-      .filter(d => !hasPokemonMissing(d) && !hasUnownedPokemon(d))
+      .map(d => {
+        const normalizedCards = normalizeCards(d.cards);
+        return { _raw: d, normalizedCards };
+      })
+      .filter(({ _raw: d, normalizedCards }) =>
+        !hasPokemonMissing(d) && !hasUnownedPokemon(normalizedCards)
+      )
       .slice(0, 10)
-      .map(d => ({
+      .map(({ _raw: d, normalizedCards }) => ({
         name:     String(d.name || "").trim().slice(0, 60),
         strategy: String(d.strategy || "").trim().slice(0, 400),
-        cards: (d.cards || []).slice(0, 60).map(c => ({
-          cardId:    String(c.cardId || "").trim().slice(0, 40),
-          name:      String(c.name   || "").trim().slice(0, 60),
-          qty:       Math.min(60, Math.max(1, parseInt(c.qty) || 1)),
-          owned:     !!c.owned,
-          isPokemon: !!c.isPokemon
-        })),
+        cards: normalizedCards,
         energy: (d.energy || []).map(e => ({
           type: String(e.type || "").trim().slice(0, 20),
           qty:  Math.min(30, Math.max(0, parseInt(e.qty) || 0))
         })),
         missingCards: (d.missingCards || [])
-          .filter(c => !c.isPokemon && TRAINER_RE.test(String(c.name||""))) // double filet
+          .filter(c => !c.isPokemon && TRAINER_RE.test(String(c.name||"")))
           .slice(0, 4)
           .map(c => ({
             name:    String(c.name    || "").trim().slice(0, 60),
