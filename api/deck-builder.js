@@ -14,9 +14,20 @@ export default async function handler(req, res) {
     const norm = s => String(s||"").toLowerCase().replace(/[^a-z0-9éèêëàâùûîïôœç]/g,"").trim();
     const ownedByName = new Map(cards.map(c => [norm(c.name), c]));
 
-    // Limite à 150 cartes (les plus possédées) pour garder le prompt court
-    const topCards = [...cards].sort((a,b) => b.qty - a.qty).slice(0, 150);
-    const cardList  = topCards.map(c => `- [${c.cardId}] ${c.name} (${c.setId}) ×${c.qty}`).join("\n");
+    // Format compact : regroupe par nom (somme des quantités), trie par qty desc
+    // Garde l'ID de la carte la plus possédée pour la validation post-Gemini
+    const byName = new Map();
+    for (const c of cards) {
+      const key = norm(c.name);
+      if (!byName.has(key)) byName.set(key, { name: c.name, cardId: c.cardId, setId: c.setId, qty: 0 });
+      const e = byName.get(key);
+      e.qty += c.qty;
+      if (c.qty > (byName.get(key)._maxQty||0)) { e._maxQty = c.qty; e.cardId = c.cardId; e.setId = c.setId; }
+    }
+    const cardList = [...byName.values()]
+      .sort((a,b) => b.qty - a.qty)
+      .map(c => `${c.name} ×${c.qty}`)
+      .join(", ");
     const energyList = energy.map(e => `- ${e.type}: ${e.qty} cartes`).join("\n");
 
     const typesLine = preferredTypes.length
@@ -28,7 +39,7 @@ export default async function handler(req, res) {
 
     const prompt = `Tu es un expert du Pokémon TCG compétitif.
 
-CARTES POSSÉDÉES PAR LE JOUEUR (LISTE EXHAUSTIVE) :
+CARTES POSSÉDÉES PAR LE JOUEUR (format: Nom ×quantité, séparés par virgule) :
 ${cardList}
 
 STOCK D'ÉNERGIES :
