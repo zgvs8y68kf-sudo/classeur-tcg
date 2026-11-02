@@ -14,7 +14,9 @@ export default async function handler(req, res) {
     const norm = s => String(s||"").toLowerCase().replace(/[^a-z0-9éèêëàâùûîïôœç]/g,"").trim();
     const ownedByName = new Map(cards.map(c => [norm(c.name), c]));
 
-    const cardList  = cards.map(c => `- [${c.cardId}] ${c.name} (${c.setId}) ×${c.qty}`).join("\n");
+    // Limite à 150 cartes (les plus possédées) pour garder le prompt court
+    const topCards = [...cards].sort((a,b) => b.qty - a.qty).slice(0, 150);
+    const cardList  = topCards.map(c => `- [${c.cardId}] ${c.name} (${c.setId}) ×${c.qty}`).join("\n");
     const energyList = energy.map(e => `- ${e.type}: ${e.qty} cartes`).join("\n");
 
     const typesLine = preferredTypes.length
@@ -86,10 +88,10 @@ JSON UNIQUEMENT (pas de texte avant/après) :
     let gemRes = null, lastErr = "";
     try {
       const endpoints = [
+        { m:"gemini-3.1-flash-lite", v:"v1beta" },
         { m:"gemini-flash-latest", v:"v1beta" },
-        { m:"gemini-2.5-flash", v:"v1beta" },
+        { m:"gemini-3.5-flash-lite", v:"v1beta" },
         { m:"gemini-3.5-flash", v:"v1beta" },
-        { m:"gemini-flash-lite-latest", v:"v1beta" },
       ];
       const races = endpoints.map(({m,v}) =>
         fetch(`https://generativelanguage.googleapis.com/${v}/models/${m}:generateContent?key=${key}`,
