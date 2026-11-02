@@ -2669,18 +2669,32 @@ async function compressImg(file, maxPx, q) {
 const compressForGemini = f => compressImg(f, 1280, 0.90);
 const compressForPage   = f => compressImg(f, 2000, 0.88); // plus haute résolution pour 9 cartes
 
-/* Fallback image : FR 404 → EN ; pas d'URL → fetch TCGdex EN */
+/* Fallback image : FR→EN, webp→png, puis fetch TCGdex EN */
 const _enImgCache = {};
 async function imgFb(el) {
   el.onerror = null;
   const s = el.src || "";
+
+  // 1. URL FR 404 → essaie EN (même extension)
   if (s.includes("/fr/")) {
-    // URL FR existe mais 404 → essaie EN
-    el.onerror = () => { el.onerror = null; };
+    el.onerror = () => imgFb(el);
     el.src = s.replace("/fr/", "/en/");
     return;
   }
-  // Pas d'URL FR du tout (data-set / data-local requis)
+
+  // 2. .webp 404 → essaie .png (certains sets TCGdex, dont la Classic 30 ans)
+  if (s.endsWith("/low.webp")) {
+    el.onerror = () => imgFb(el);
+    el.src = s.replace("/low.webp", "/low.png");
+    return;
+  }
+  if (s.endsWith("/high.webp")) {
+    el.onerror = () => imgFb(el);
+    el.src = s.replace("/high.webp", "/high.png");
+    return;
+  }
+
+  // 3. .png aussi 404, ou pas d'URL du tout → fetch TCGdex EN
   const sid = el.dataset.set, lid = el.dataset.local;
   if (!sid || !lid) return;
   const key = `${sid}-${lid}`;
@@ -2690,7 +2704,11 @@ async function imgFb(el) {
       _enImgCache[key] = r.ok ? ((await r.json()).image || null) : null;
     } catch { _enImgCache[key] = null; }
   }
-  if (_enImgCache[key]) el.src = _enImgCache[key] + "/low.webp";
+  if (_enImgCache[key]) {
+    // Essaie d'abord webp, retombe sur png si besoin
+    el.onerror = () => { el.onerror = null; el.src = _enImgCache[key] + "/low.png"; };
+    el.src = _enImgCache[key] + "/low.webp";
+  }
 }
 
 const _logoCache = {};
