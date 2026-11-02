@@ -73,7 +73,7 @@ STRUCTURE RECOMMANDÉE (60 cartes) :
   • ~10-14 Énergies de Base
 
 ════════════════════════════════════════════
-MISSION : ${preferredTypes.length ? "3 DECKS CIBLÉS" : "5 DECKS COMPLETS"}, UNIQUEMENT AVEC LES CARTES POSSÉDÉES
+MISSION : 2 DECKS COMPLETS, UNIQUEMENT AVEC LES CARTES POSSÉDÉES
 ════════════════════════════════════════════
 • Varie les archétypes (aggro, contrôle, combo) et les Pokémon-star
 • Ordre : du plus jouable au moins jouable
@@ -161,7 +161,7 @@ JSON UNIQUEMENT (pas de texte avant/après) :
       .filter(({ _raw: d, normalizedCards }) =>
         !hasPokemonMissing(d) && !hasUnownedPokemon(normalizedCards)
       )
-      .slice(0, 10)
+      .slice(0, 2)
       .map(({ _raw: d, normalizedCards }) => ({
         name:     String(d.name || "").trim().slice(0, 60),
         strategy: String(d.strategy || "").trim().slice(0, 400),
