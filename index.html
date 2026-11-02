@@ -2340,8 +2340,10 @@ async function scanPage(file) {
       entry.debug = `Page : ${cards.length} carte(s) détectée(s) — confirme ou retire`;
       // Résoudre chaque carte en parallèle (max 5 à la fois pour éviter le throttling)
       const resolve = async det => {
-        let cands = det.number ? filterCandsByName(await lookupCard(det.number, det.total, det.setCode), det.name) : [];
-        if (!cands.length) cands = await matchCard({...det, language: S.lang, variant: "normal"});
+        // Priorité au nom : matchCard cherche par nom et classe par numéro
+        let cands = det.name ? await matchCard({...det, language: S.lang, variant: "normal"}) : [];
+        // Fallback par numéro uniquement si la recherche par nom n'a rien donné
+        if (!cands.length && det.number) cands = filterCandsByName(await lookupCard(det.number, det.total, det.setCode), det.name);
         return { det: {...det, language: S.lang, variant: "normal"}, cands, sel: 0, added: false };
       };
       const results = [];
@@ -2445,9 +2447,11 @@ async function scanFiles(files) {
         entry.debug = `Gemini → ${[name, number&&(number+(total?"/"+total:"")), setCode].filter(Boolean).join(" ")}`;
       }
 
-      let cands = number ? filterCandsByName(await lookupCard(number, total, setCode), name) : [];
       const det = { name, number, total, setCode, language: S.lang, variant: "normal" };
-      if (!cands.length) cands = await matchCard(det);
+      // Priorité au nom : matchCard cherche par nom et classe par numéro
+      let cands = name ? await matchCard(det) : [];
+      // Fallback par numéro si la recherche par nom échoue
+      if (!cands.length && number) cands = filterCandsByName(await lookupCard(number, total, setCode), name);
       entry.found = [{ det, cands, sel: 0, added: false }];
       entry.status = "done";
     } catch(e) {
