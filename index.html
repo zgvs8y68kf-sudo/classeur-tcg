@@ -2632,7 +2632,7 @@ function go(tab){ S.tab = tab; window.scrollTo(0,0); render(); if (tab === "sear
 document.addEventListener("click", e => {
   if (e.target.closest(".scrim")) return;
   const qa = e.target.closest("[data-quickadd]"); if (qa) { const ci = qa.dataset.qacinfo ? JSON.parse(qa.dataset.qacinfo) : null; quickAdd(qa.dataset.quickadd, ci); return; }
-  const b = e.target.closest("button"); if (!b) return;
+  const b = e.target.closest("button,[data-act]"); if (!b) return;
   if (b.dataset.tab) return go(b.dataset.tab);
   if (b.dataset.lang && b.dataset.lang !== S.lang) { S.lang = b.dataset.lang; lsSet("lang", S.lang); S.setCache = {}; loadCatalog(); if (S.tab === "search") { $("#app").innerHTML = viewSearch(); } return; }
   if (b.dataset.serie) { const id = b.dataset.serie; S.openSeries.has(id) ? S.openSeries.delete(id) : S.openSeries.add(id); lsSet("openSeries", JSON.stringify([...S.openSeries])); return render(); }
