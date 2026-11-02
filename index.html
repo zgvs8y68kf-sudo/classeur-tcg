@@ -1710,7 +1710,30 @@ function viewLists(){
   const buyBtn = `<button class="btn" data-act="getbuyadvice" style="font-size:13px;margin-bottom:10px">🔍 Quoi acheter ?</button>`;
   const buyHtml = rb?.loading ? `${buyBtn}<p class="muted"><span class="spinner"></span> Analyse en cours…</p>`
     : rb?.error ? `${buyBtn}<div class="note" style="font-size:13px">Erreur : ${esc(rb.error)}${rb.error==="no_key"?" — configure GEMINI_API_KEY sur Vercel.":""}</div>`
-    : rb?.items?.length ? buyBtn + _aiItemList(rb.items.map(x=>({...x, badge:x.setName||"", right:x.estValue?eur(x.estValue):""})), cols)
+    : rb?.items?.length ? buyBtn + `<div class="list">${rb.items.map(x => {
+        const cmQ = encodeURIComponent(x.name + (x.localId && x.setTotal ? " " + x.localId + "/" + x.setTotal : x.setName ? " " + x.setName : ""));
+        const cmUrl = `https://www.cardmarket.com/fr/Pokemon/Products/Singles?searchString=${cmQ}`;
+        const ebayQ = encodeURIComponent((x.name||"") + (x.localId ? " " + x.localId : ""));
+        const ebayUrl = `https://www.ebay.fr/sch/i.html?_nkw=${ebayQ}&LH_Sold=1&LH_Complete=1`;
+        return `<div class="item" style="flex-direction:column;align-items:flex-start;gap:6px;cursor:default">
+          <div style="display:flex;align-items:center;gap:10px;width:100%">
+            <div style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:flex;align-items:center;justify-content:center;font-size:18px">${x.type==="extension"?"📦":"🃏"}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:14px">${esc(x.name)}</div>
+              <div style="font-size:12px;color:${(cols||{})[x.priority]||"var(--muted)"}">
+                ${x.priority==="haute"?"⭐ Haute":x.priority==="moyenne"?"👍 Moyenne":"➖ Faible"} priorité${x.rarity ? " · "+esc(x.rarity) : ""}
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(x.setName||"")}${x.localId?" · n°"+esc(x.localId):""}</div>
+              <div style="font-size:12px;margin-top:3px;color:var(--fg)">${esc(x.reason||"")}</div>
+            </div>
+            ${x.estValue?`<span style="font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap">${esc(x.estValue)}</span>`:""}
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <a href="${cmUrl}" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;text-decoration:none;color:var(--fg);background:var(--sunk)">🛒 Cardmarket</a>
+            <a href="${ebayUrl}" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;text-decoration:none;color:var(--fg);background:var(--sunk)">🔍 eBay vendues</a>
+          </div>
+        </div>`;
+      }).join("")}</div>`
     : `${buyBtn}<p class="muted" style="font-size:13px">${rb ? "Aucune suggestion pour le moment." : "Gemini analyse tes extensions incomplètes et te recommande les cartes manquantes à fort potentiel."}</p>`;
 
   return `<div class="prof-intro">
@@ -1827,8 +1850,7 @@ async function analyzeForGrading(){
 }
 
 async function getBuyingAdvice(){
-  // Extensions incomplètes où l'on a déjà des cartes (contexte de collection)
-  const sets = Object.values(S.catalog?.sets || {})
+  const allSets = Object.values(S.catalog?.sets || {})
     .map(set => {
       const owned = Object.values(S.coll).filter(d => d.setId === set.id && qty(d)).length;
       const total = set.official || set.total || 0;
@@ -1837,25 +1859,35 @@ async function getBuyingAdvice(){
     .filter(s => s.owned > 0 && s.pct < 100 && s.total > 0)
     .sort((a,b) => b.owned - a.owned)
     .slice(0, 25);
-  // Cartes déjà dans la liste de souhaits
   const wished = Object.values(S.coll).filter(d => d.wish && !qty(d))
-    .map(d => ({ name: d.name, setId: d.setId, cardId: d.cardId })).slice(0, 20);
-  if (!sets.length) {
+    .map(d => ({ name: d.name, setId: d.setId, localId: d.localId, cardId: d.cardId })).slice(0, 30);
+  if (!allSets.length) {
     S.buyAdvice = { error: "Scan des cartes pour construire ta collection d'abord." };
     render(); return;
   }
   S.buyAdvice = { loading: true }; render();
   try {
+    // Récupère les cartes manquantes des 8 sets les plus avancés
+    const topSets = allSets.slice(0, 8);
+    const setsWithMissing = await Promise.all(topSets.map(async s => {
+      try {
+        const data = await j(`${API}/${S.lang}/sets/${s.setId}`);
+        const ownedLocalIds = new Set(Object.values(S.coll).filter(d => d.setId === s.setId && qty(d)).map(d => d.localId));
+        const missing = (data?.cards || [])
+          .filter(c => !ownedLocalIds.has(c.localId))
+          .map(c => ({ name: c.name, localId: c.localId, rarity: c.rarity || "" }))
+          .slice(0, 25);
+        return { ...s, missing };
+      } catch { return { ...s, missing: [] }; }
+    }));
     const res = await fetch("/api/buy-advice", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sets, wished })
+      body: JSON.stringify({ sets: setsWithMissing, wished, lang: S.lang })
     });
     const data = await res.json();
     if (!res.ok) { S.buyAdvice = { error: data.error || "Erreur serveur" }; }
-    else {
-      S.buyAdvice = { items: data.recommendations || [] };
-    }
+    else { S.buyAdvice = { items: data.recommendations || [] }; }
   } catch(e) { S.buyAdvice = { error: e.message || "Réseau indisponible" }; }
   render();
 }
