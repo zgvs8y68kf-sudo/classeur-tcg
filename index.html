@@ -389,6 +389,11 @@ const Store = {
         this.uid = user ? user.uid : null; S.user = user;
         if (!user) { this.mode = "local"; this.loadLocal(); return; }
         this.mode = "db";
+        // Decks, energies et état de combat restent en localStorage même en mode Firebase
+        try { S.decks = JSON.parse(lsGet("decks") || "{}"); } catch { S.decks = {}; }
+        try { const def = Object.fromEntries(ENERGY_TYPES.map(e=>[e.k,20])); const saved = JSON.parse(lsGet("energy")||"null"); S.energyStock = saved ? {...def,...saved} : def; } catch {}
+        try { S.battleState = JSON.parse(lsGet("battle") || "null"); } catch { S.battleState = null; }
+        try { S.deckEnergyFilter = JSON.parse(lsGet("deckEF") || "[]"); } catch { S.deckEnergyFilter = []; }
         this.migrateLocal();
         this.unsub = fs.onSnapshot(fs.collection(db, "users", user.uid, "cards"), snap => {
           const coll = {}; snap.forEach(d => { const x = d.data(); if (x && x.cardId) coll[x.cardId] = x; });
@@ -420,7 +425,6 @@ const Store = {
     try { const def = Object.fromEntries(ENERGY_TYPES.map(e=>[e.k,20])); const saved = JSON.parse(lsGet("energy")||"null"); S.energyStock = saved ? {...def,...saved} : def; } catch { S.energyStock = Object.fromEntries(ENERGY_TYPES.map(e=>[e.k,20])); }
     try { S.battleState = JSON.parse(lsGet("battle") || "null"); } catch { S.battleState = null; }
     try { S.deckEnergyFilter = JSON.parse(lsGet("deckEF") || "[]"); } catch { S.deckEnergyFilter = []; }
-    try { S.deckAdvice = JSON.parse(lsGet("deckAdvice") || "null"); } catch { S.deckAdvice = null; }
     render(); autoRefreshIfStale();
   },
   async save(card){
@@ -1265,7 +1269,7 @@ async function generateDecks(){
     });
     const data = await res.json();
     if (!res.ok) S.deckAdvice={error:data.error||"Erreur serveur"};
-    else { S.deckAdvice={decks:data.decks||[]}; lsSet("deckAdvice", JSON.stringify(S.deckAdvice)); }
+    else S.deckAdvice={decks:data.decks||[]};
   } catch(e) { S.deckAdvice={error:e.message||"Réseau indisponible"}; }
   render();
 }
