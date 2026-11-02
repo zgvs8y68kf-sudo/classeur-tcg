@@ -43,7 +43,7 @@ Inclus seulement les cartes rentables à grader. Maximum 12 recommandations, ord
     });
 
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const timer = setTimeout(() => ctrl.abort(), 8000);
     let gemRes = null, lastErr = "";
     try {
       const models = [

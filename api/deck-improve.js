@@ -55,7 +55,7 @@ JSON UNIQUEMENT :
     });
 
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20000);
+    const timer = setTimeout(() => ctrl.abort(), 8000);
     let gemRes = null, lastErr = "";
     try {
       const models = ["gemini-2.5-flash","gemini-2.0-flash","gemini-2.0-flash-lite","gemini-1.5-flash"];

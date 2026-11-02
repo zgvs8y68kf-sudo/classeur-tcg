@@ -1272,7 +1272,7 @@ async function generateDecks(){
       body: JSON.stringify({cards, energy, preferredTypes: S.deckEnergyFilter})
     });
     const data = await res.json();
-    if (!res.ok) S.deckAdvice={error:data.error||"Erreur serveur"};
+    if (!res.ok) S.deckAdvice={error:data.error||"Erreur serveur", detail:data.detail||""};
     else S.deckAdvice={decks:data.decks||[]};
   } catch(e) { S.deckAdvice={error:e.message||"Réseau indisponible"}; }
   render();
@@ -1525,7 +1525,7 @@ function viewDecks(){
   const aiHtml = da?.loading
     ? `<p class="muted"><span class="spinner"></span> Gemini analyse ta collection… (peut prendre 20 s)</p>`
     : da?.error
-    ? `<div class="note" style="font-size:13px">Erreur : ${esc(da.error)}</div>`
+    ? `<div class="note" style="font-size:13px">Erreur : ${esc(da.error)}${da.detail ? `<br><span style="font-size:11px;opacity:0.6">${esc(da.detail)}</span>` : ""}${da.error==="no_key" ? " — configure GEMINI_API_KEY sur Vercel." : ""}</div>`
     : da?.decks?.length
     ? `<div style="display:flex;flex-direction:column;gap:10px">${da.decks.map((d,i)=>{
         const conflicts = deckConflicts(d);
@@ -1698,7 +1698,7 @@ function viewLists(){
     <span style="font-size:12px;color:var(--muted)">Gradeur préféré : <b style="color:var(--fg)">${esc(pg)}</b> (${graderCosts[pg]||"~30 €"}) — <button class="btn" data-act="openprofile" style="font-size:11px;padding:4px 10px">Changer</button></span>
   </div>`;
   const gradingHtml = rg?.loading ? `${gradingBtn}<p class="muted"><span class="spinner"></span> Analyse en cours…</p>`
-    : rg?.error ? `${gradingBtn}<div class="note" style="font-size:13px">Erreur : ${esc(rg.error)}${rg.error==="no_key"?" — configure GEMINI_API_KEY sur Vercel.":""}</div>`
+    : rg?.error ? `${gradingBtn}<div class="note" style="font-size:13px">Erreur : ${esc(rg.error)}${rg.detail?`<br><span style="font-size:11px;opacity:0.6">${esc(rg.detail)}</span>`:""}${rg.error==="no_key"?" — configure GEMINI_API_KEY sur Vercel.":""}</div>`
     : rg?.items?.length ? gradingBtn + _aiItemList(rg.items.map(x=>{
         const ref = S.coll[x.cardId]?.gradeRef;
         const sub = ref ? Object.entries(ref).map(([co,vals])=>`${co} — `+[10,9,8].filter(n=>vals[n]!=null).map(n=>`${n}: ${eur(vals[n])}`).join(" · ")).join("  ") : "";
@@ -1710,7 +1710,7 @@ function viewLists(){
   const rb = S.buyAdvice;
   const buyBtn = `<button class="btn" data-act="getbuyadvice" style="font-size:13px;margin-bottom:10px">🔍 Quoi acheter ?</button>`;
   const buyHtml = rb?.loading ? `${buyBtn}<p class="muted"><span class="spinner"></span> Analyse en cours…</p>`
-    : rb?.error ? `${buyBtn}<div class="note" style="font-size:13px">Erreur : ${esc(rb.error)}${rb.error==="no_key"?" — configure GEMINI_API_KEY sur Vercel.":""}</div>`
+    : rb?.error ? `${buyBtn}<div class="note" style="font-size:13px">Erreur : ${esc(rb.error)}${rb.detail?`<br><span style="font-size:11px;opacity:0.6">${esc(rb.detail)}</span>`:""}${rb.error==="no_key"?" — configure GEMINI_API_KEY sur Vercel.":""}</div>`
     : rb?.items?.length ? buyBtn + `<div class="list">${rb.items.map(x => {
         const cmQ = encodeURIComponent(x.name + (x.localId && x.setTotal ? " " + x.localId + "/" + x.setTotal : x.setName ? " " + x.setName : ""));
         const cmUrl = `https://www.cardmarket.com/fr/Pokemon/Products/Singles?searchString=${cmQ}`;
@@ -1838,7 +1838,7 @@ async function analyzeForGrading(){
       body: JSON.stringify({ cards: candidates, preferredGrader: S.profile.preferredGrader || "PSA" })
     });
     const data = await res.json();
-    if (!res.ok) { S.gradeReco = { error: data.error || "Erreur serveur" }; }
+    if (!res.ok) { S.gradeReco = { error: data.error || "Erreur serveur", detail: data.detail || "" }; }
     else {
       const items = (data.recommendations || []).map(r => {
         const orig = cardMap[r.cardId] || candidates.find(c => normStr(c.name) === normStr(r.name));
@@ -1887,7 +1887,7 @@ async function getBuyingAdvice(){
       body: JSON.stringify({ sets: setsWithMissing, wished, lang: S.lang })
     });
     const data = await res.json();
-    if (!res.ok) { S.buyAdvice = { error: data.error || "Erreur serveur" }; }
+    if (!res.ok) { S.buyAdvice = { error: data.error || "Erreur serveur", detail: data.detail || "" }; }
     else { S.buyAdvice = { items: data.recommendations || [] }; }
   } catch(e) { S.buyAdvice = { error: e.message || "Réseau indisponible" }; }
   render();
