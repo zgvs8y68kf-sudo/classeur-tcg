@@ -1489,6 +1489,16 @@ async function openManualDeckBuilder() {
   const SB = {vmax:{l:'VMAX',c:'#8b5cf6'},vstar:{l:'VSTAR',c:'#f59e0b'},ex:{l:'EX',c:'#ef4444'},gx:{l:'GX',c:'#3b82f6'},v:{l:'V',c:'#10b981'},'stage 2':{l:'S2',c:'#6366f1'},'stage2':{l:'S2',c:'#6366f1'},'stage 1':{l:'S1',c:'#94a3b8'},'stage1':{l:'S1',c:'#94a3b8'}};
   function gm(card){return S._cardMeta?.[card.setId]?.[String(card.localId)]||null;}
   function nT(t){return TFR[t.toLowerCase()]||t;}
+  // Détecte le tier depuis le nom (VMAX/VSTAR/ex/GX/V sont "Basic" dans TCGdex)
+  function stageOf(d){
+    const n=(d.name||'').toLowerCase().trim();
+    if(n.endsWith(' vmax'))return 'vmax';
+    if(n.endsWith(' vstar'))return 'vstar';
+    if(/[ -]ex$/.test(n))return 'ex';
+    if(/[ -]gx$/.test(n))return 'gx';
+    if(/[ -]v$/.test(n))return 'v';
+    return d._m?.stage||'';
+  }
   function dc(){
     let p=0,t=0,e=0;
     for(const c of Object.values(mdb.cards)){const cat=(gm(S.coll[c.cardId]||{})?.cat||'').toLowerCase();if(cat.includes('pok')||!cat)p+=c.qty;else if(cat.includes('nerg')||cat.includes('ener'))e+=c.qty;else t+=c.qty;}
@@ -1499,8 +1509,20 @@ async function openManualDeckBuilder() {
     return Object.values(S.coll).filter(d=>qty(d)>0&&d.setId&&d.localId)
       .map(d=>({...d,_q:qty(d),_m:gm(d)}))
       .filter(d=>{const c=(d._m?.cat||'').toLowerCase();return cat==='pokemon'?(c.includes('pok')||!c):(!c.includes('pok')&&!c.includes('nerg')&&!c.includes('ener')&&!!c);})
-      .filter(d=>cat!=='pokemon'||!mdb.types.length||(()=>{const tt=(d._m?.types||[]).map(nT);return!tt.length||mdb.types.some(t=>tt.includes(t));})())
-      .sort((a,b)=>{const sd=(SS[a._m?.stage||'']??5)-(SS[b._m?.stage||'']??5);if(sd)return sd;const hd=(b._m?.hp||0)-(a._m?.hp||0);if(hd)return hd;return(b.prices?.normal||b.prices?.holo||0)-(a.prices?.normal||a.prices?.holo||0);});
+      .filter(d=>{
+        if(cat!=='pokemon'||!mdb.types.length)return true;
+        if(!d._m)return true; // métadonnées absentes : inclure par défaut
+        const tt=(d._m.types||[]).map(nT);
+        if(!tt.length)return false; // Incolore / sans type déclaré = hors filtre
+        return mdb.types.some(t=>tt.includes(t));
+      })
+      .sort((a,b)=>{
+        const sa=SS[stageOf(a)]??5,sb=SS[stageOf(b)]??5;
+        if(sa!==sb)return sa-sb;
+        const hd=(b._m?.hp||0)-(a._m?.hp||0);
+        if(hd)return hd;
+        return(b.prices?.normal||b.prices?.holo||0)-(a.prices?.normal||a.prices?.holo||0);
+      });
   }
 
   // ── Step renderers ───────────────────────────────────────
@@ -1528,7 +1550,7 @@ async function openManualDeckBuilder() {
     ${!cc.length?`<div style="text-align:center;padding:48px 0;color:var(--muted)"><div style="font-size:48px;margin-bottom:12px">${cat==='pokemon'?'🐲':'📋'}</div><p>Aucune carte${mdb.types.length&&cat==='pokemon'?' pour ces types':''}</p></div>`:
     `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       ${cc.slice(0,60).map(card=>{
-        const id=mdb.cards[card.cardId]?.qty||0,mx=Math.min(4,card._q),ca=id<mx&&rem>0,b=SB[card._m?.stage||''],pr=card.prices?.normal||card.prices?.holo||card.prices?.reverse||0;
+        const id=mdb.cards[card.cardId]?.qty||0,mx=Math.min(4,card._q),ca=id<mx&&rem>0,b=SB[stageOf(card)],pr=card.prices?.normal||card.prices?.holo||card.prices?.reverse||0;
         return`<div data-cr="${esc(card.cardId)}" style="border-radius:14px;overflow:hidden;background:var(--surface);border:2.5px solid ${id>0?'var(--accent)':'var(--line)'};position:relative;transition:border-color .15s">
           ${card.image?`<div style="background:var(--sunk);aspect-ratio:2.5/3.5;overflow:hidden"><img src="${card.image}/low.webp" style="width:100%;height:100%;object-fit:contain" loading="lazy"></div>`:`<div style="aspect-ratio:2.5/3.5;background:var(--sunk);display:flex;align-items:center;justify-content:center;font-size:32px">${cat==='pokemon'?'🐲':'📋'}</div>`}
           ${b?`<span style="position:absolute;top:6px;left:6px;font-size:9px;padding:2px 6px;border-radius:5px;background:${b.c};color:#fff;font-weight:800">${b.l}</span>`:''}
