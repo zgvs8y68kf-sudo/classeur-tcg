@@ -1509,18 +1509,21 @@ async function openManualDeckBuilder() {
     return Object.values(S.coll).filter(d=>qty(d)>0&&d.setId&&d.localId)
       .map(d=>({...d,_q:qty(d),_m:gm(d)}))
       .filter(d=>{const c=(d._m?.cat||'').toLowerCase();return cat==='pokemon'?(c.includes('pok')||!c):(!c.includes('pok')&&!c.includes('nerg')&&!c.includes('ener')&&!!c);})
-      .filter(d=>{
-        if(cat!=='pokemon'||!mdb.types.length)return true;
-        if(!d._m)return true; // métadonnées absentes : inclure par défaut
-        const tt=(d._m.types||[]).map(nT);
-        if(!tt.length)return false; // Incolore / sans type déclaré = hors filtre
-        return mdb.types.some(t=>tt.includes(t));
-      })
       .sort((a,b)=>{
+        // Priorité 1 : type match (si types sélectionnés)
+        if(mdb.types.length&&cat==='pokemon'){
+          const ta=(a._m?.types||[]).map(nT),tb=(b._m?.types||[]).map(nT);
+          const ma=ta.length>0&&mdb.types.some(t=>ta.includes(t));
+          const mb=tb.length>0&&mdb.types.some(t=>tb.includes(t));
+          if(ma!==mb)return ma?-1:1;
+        }
+        // Priorité 2 : tier (VMAX/ex/GX > V > S2 > S1 > Basic)
         const sa=SS[stageOf(a)]??5,sb=SS[stageOf(b)]??5;
         if(sa!==sb)return sa-sb;
+        // Priorité 3 : PV desc
         const hd=(b._m?.hp||0)-(a._m?.hp||0);
         if(hd)return hd;
+        // Priorité 4 : prix desc
         return(b.prices?.normal||b.prices?.holo||0)-(a.prices?.normal||a.prices?.holo||0);
       });
   }
