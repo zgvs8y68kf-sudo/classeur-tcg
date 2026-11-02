@@ -582,6 +582,58 @@ function priceOf(pricing, variant){
   return { cm: c, tp: t, main: c ? pick(c.trend, c.avg, c.avg7) : null };
 }
 
+function launchConfetti(){
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999";
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext("2d");
+  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+  const pieces = Array.from({length:90}, () => ({
+    x: Math.random()*canvas.width, y: Math.random()*canvas.height*0.5-canvas.height*0.5,
+    r: 4+Math.random()*6, dx: (Math.random()-0.5)*4, dy: 2+Math.random()*5,
+    color: ["#f97316","#3b82f6","#22c55e","#eab308","#a855f7","#ec4899"][Math.floor(Math.random()*6)],
+    rot: Math.random()*Math.PI*2, drot: (Math.random()-0.5)*0.2
+  }));
+  let frame = 0;
+  const anim = () => {
+    frame++;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    pieces.forEach(p => {
+      p.x += p.dx; p.y += p.dy; p.rot += p.drot;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = p.color; ctx.globalAlpha = Math.max(0, 1 - frame/120);
+      ctx.fillRect(-p.r,-p.r/2,p.r*2,p.r); ctx.restore();
+    });
+    if (frame < 120) requestAnimationFrame(anim); else canvas.remove();
+  };
+  requestAnimationFrame(anim);
+}
+
+function checkSetCompletion(setId){
+  if (!setId || !S.catalog?.sets?.[setId]) return;
+  const meta = S.catalog.sets[setId];
+  const tot = meta.official || meta.total || 0;
+  if (!tot) return;
+  const own = ownedInSet(setId);
+  if (own >= tot) {
+    const key = "cc_" + setId;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+    toast(`🎉 Extension complète : ${meta.name} !`);
+    launchConfetti();
+  }
+}
+
+function timeAgo(ts){
+  if (!ts) return null;
+  const d = Math.floor((Date.now() - ts) / 1000);
+  if (d < 60) return "à l'instant";
+  if (d < 3600) return `il y a ${Math.floor(d/60)} min`;
+  if (d < 86400) return `il y a ${Math.floor(d/3600)} h`;
+  if (d < 86400*2) return "hier";
+  return `il y a ${Math.floor(d/86400)} j`;
+}
+
 function cardValue(doc){
   let v = 0, priced = false;
   for (const [k] of VARIANTS) { const q = doc.v?.[k] || 0; if (!q) continue; const p = doc.prices?.[k] ?? doc.prices?.normal; if (p) { v += q * p; priced = true; } }
@@ -799,6 +851,19 @@ function viewHome(){
     ${lastStr ? `<p class="muted" style="font-size:12px;margin:10px 0 0">${lastStr} · Cardmarket via TCGdex${typeof Notification !== "undefined" && Notification.permission === "default" ? ` · <button class="btn" data-act="reqnotif" style="font-size:11px;padding:2px 8px;border-radius:999px;display:inline">🔔 Alertes prix</button>` : ""}</p>` : ""}
   </section>
   ${empty ? `<div class="empty"><p style="font-size:16px;color:var(--fg);font-weight:600;margin:0 0 6px">Ton classeur est vide</p><p style="margin:0">Scanne une carte avec le bouton rouge, ou ouvre <b>Séries</b> pour cocher tes cartes à la main.</p></div>` : `
+  ${(() => {
+    const sets = Object.values(S.catalog?.sets || {}).filter(x => ownedInSet(x.id) > 0);
+    const complete = sets.filter(x => { const tot = x.official||x.total||0; return tot && ownedInSet(x.id) >= tot; }).length;
+    const inProgress = sets.length - complete;
+    const wish = Object.values(S.coll).filter(d => d.wish && !qty(d)).length;
+    if (!sets.length) return "";
+    return `<div class="kpis" style="margin:10px 0 0">
+      <div class="kpi"><b>${sets.length}</b><span>extensions commencées</span></div>
+      <div class="kpi"><b style="color:#22c55e">${complete}</b><span>complètes ✓</span></div>
+      <div class="kpi"><b>${inProgress}</b><span>en cours</span></div>
+      <div class="kpi"><b style="color:var(--accent)">${wish}</b><span>souhaits ♥</span></div>
+    </div>`;
+  })()}
   <h2>Cartes les plus chères</h2>
   <div class="list">${top.length ? top.map(x => itemRow(x.d, eur(x.v))).join("") : `<p class="muted">Appuie sur « Actualiser les prix » pour récupérer les cotes.</p>`}</div>
   <h2>Ajoutées récemment</h2>
@@ -909,9 +974,10 @@ async function viewSet(app){
   let set; try { set = await loadSet(id); } catch { app.innerHTML = `<div class="note">Extension introuvable dans cette langue.</div>`; return; }
   if (S.tab !== "set" || S.setView !== id) return;
   const f = S.setFilter, cf = S.setCatFilter;
+  const recentCutoff = Date.now() - 7 * 86400e3;
   const cards = set.cards.filter(c => {
     const d = S.coll[c.id], q = d ? qty(d) : 0;
-    return (f === "all" || (f === "own" && q) || (f === "miss" && !q) || (f === "dup" && q > 1))
+    return (f === "all" || (f === "own" && q) || (f === "miss" && !q) || (f === "dup" && q > 1) || (f === "recent" && d?.addedAt >= recentCutoff))
         && matchCat(c, cf);
   });
   const own = ownedInSet(id), tot = set.cardCount?.official || meta?.official || set.cards.length;
@@ -937,7 +1003,7 @@ async function viewSet(app){
     <span class="num" style="font-weight:700">${own}/${tot}</span><span class="muted" style="font-size:13px">${set.cards.length > tot ? `(+${set.cards.length - tot} secrètes)` : ""}</span>
   </div>
   <div class="chips" role="group" aria-label="Filtre collection" style="margin-bottom:6px">
-    ${[["all","Toutes"],["own","Possédées"],["miss","Manquantes"],["dup","Doubles"]].map(([k,l]) => `<button class="chip" data-filter="${k}" aria-pressed="${f===k}">${l}</button>`).join("")}
+    ${[["all","Toutes"],["own","Possédées"],["miss","Manquantes"],["dup","Doubles"],["recent","🆕 Récentes"]].map(([k,l]) => `<button class="chip" data-filter="${k}" aria-pressed="${f===k}">${l}</button>`).join("")}
   </div>
   <div class="chips" role="group" aria-label="Filtre type" style="margin-bottom:12px">
     <button class="chip chip-cat" data-catfilter="all" aria-pressed="${cf==="all"}">Tout <span class="chip-n">${set.cards.length}</span></button>
@@ -1077,8 +1143,12 @@ function setSlot(pIdx, slot, val){
   if (slot === "active") p.active = val; else p.bench[parseInt(slot)] = val;
 }
 
+function battleSnapshot(){ if (!S.battleState) return; S.battleState._undo = JSON.parse(JSON.stringify({players:S.battleState.players, turn:S.battleState.turn, log:[...S.battleState.log]})); }
+function undoBattle(){ if (!S.battleState?._undo) { toast("Rien à annuler"); return; } const u = S.battleState._undo; S.battleState.players = u.players; S.battleState.turn = u.turn; S.battleState.log = u.log; S.battleState._undo = null; saveBattleState(); render(); toast("Action annulée"); }
+
 function applyDmg(pIdx, slot, dmg){
   const t = getSlot(pIdx, slot); if (!t) return;
+  battleSnapshot();
   t.hp = Math.max(0, t.hp - dmg);
   battleLog(`T${S.battleState.turn} <b>${S.battleState.players[pIdx].name}</b> — ${t.name} reçoit ${dmg} dégâts (${t.hp}/${t.maxHp} PV)`);
   saveBattleState(); render();
@@ -1086,6 +1156,7 @@ function applyDmg(pIdx, slot, dmg){
 
 function healPoke(pIdx, slot, amount){
   const t = getSlot(pIdx, slot); if (!t) return;
+  battleSnapshot();
   t.hp = Math.min(t.maxHp, t.hp + amount);
   battleLog(`T${S.battleState.turn} <b>${S.battleState.players[pIdx].name}</b> — ${t.name} soigne ${amount} PV (${t.hp}/${t.maxHp})`);
   saveBattleState(); render();
@@ -1108,6 +1179,7 @@ function prizesForPoke(name){
 
 function koPoke(pIdx){
   const p = S.battleState.players[pIdx]; if (!p.active) return;
+  battleSnapshot();
   const koName = p.active.name;
   const prizes = prizesForPoke(koName);
   const opp = S.battleState.players[1-pIdx];
@@ -1315,6 +1387,7 @@ function addCardFromCollection(edDeck, onAdd){
     </div>`;
     sub.querySelector("#ac-x").onclick = () => sub.remove();
     sub.querySelector("#ac-q").addEventListener("input", e => buildPicker(e.target.value));
+    if (q) { const inp = sub.querySelector("#ac-q"); if (inp) { inp.focus(); inp.setSelectionRange(q.length, q.length); } }
     sub.querySelectorAll("[data-ac]").forEach(btn => btn.onclick = () => {
       const card = S.coll[btn.dataset.ac]; if (!card) return;
       const existing = edDeck.cards.find(c=>c.cardId===card.cardId);
@@ -1398,13 +1471,27 @@ function openDeckEditor(deckId){
     if (de === "edel") { const ei=parseInt(btn.dataset.ei); ed.energy.splice(ei,1); rebuild(); return; }
     if (de === "addcard") { addCardFromCollection(ed, rebuild); return; }
     if (de === "addenergy") {
-      const type = prompt("Type d'énergie :\nFeu / Eau / Plante / Foudre / Psy / Combat / Obscurité / Métal / Fée / Dragon / Incolore");
-      if (!type) return;
-      const found = ENERGY_TYPES.find(t=>t.k.toLowerCase()===type.trim().toLowerCase());
-      if (!found) { toast("Type inconnu. Ex : Feu, Eau, Plante…"); return; }
-      const existing = ed.energy.find(e=>e.type===found.k);
-      if (existing) existing.qty += 4; else ed.energy.push({type:found.k, qty:4});
-      rebuild(); return;
+      const ep = document.createElement("div"); ep.className = "scrim"; ep.style.zIndex = "40";
+      ep.innerHTML = `<div class="sheet" style="max-height:80%">
+        <div class="sheet-header"><button class="sheet-close" id="ep-x">✕</button></div>
+        <h2 style="margin:0 0 12px;font-size:15px">⚡ Ajouter un type d'énergie</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          ${ENERGY_TYPES.map(e=>`<button data-epick="${esc(e.k)}" style="padding:14px 8px;border-radius:14px;border:2px solid var(--line);background:var(--surface);cursor:pointer;text-align:center">
+            <div style="font-size:28px;margin-bottom:6px">${e.i}</div>
+            <div style="font-size:13px;font-weight:700;color:var(--fg)">${e.k}</div>
+          </button>`).join("")}
+        </div>
+      </div>`;
+      ep.querySelector("#ep-x").onclick = () => ep.remove();
+      ep.addEventListener("click", ev => {
+        const btn = ev.target.closest("[data-epick]"); if (!btn && ev.target === ep) { ep.remove(); return; }
+        if (!btn) return;
+        const found = ENERGY_TYPES.find(t=>t.k===btn.dataset.epick); if (!found) return;
+        const existing = ed.energy.find(e=>e.type===found.k);
+        if (existing) existing.qty += 4; else ed.energy.push({type:found.k, qty:4});
+        ep.remove(); rebuild();
+      });
+      document.body.appendChild(ep); return;
     }
     if (de === "apply-sug") {
       const name = btn.dataset.sname, qty = parseInt(btn.dataset.sqty)||1;
@@ -1486,7 +1573,7 @@ async function openManualDeckBuilder() {
   }));
 
   // Phase 2 : types manquants → cache localStorage + fetch individuel par carte
-  if (!S._cardTypes) { try { S._cardTypes=JSON.parse(localStorage.getItem('ctcg_card_types')||'{}'); } catch { S._cardTypes={}; } }
+  if (!S._cardTypes) { try { S._cardTypes=JSON.parse(localStorage.getItem('ctcg_card_types_v2')||'{}'); } catch { S._cardTypes={}; } }
   const needT = Object.values(S.coll).filter(d=>{
     if(!qty(d)||!d.cardId)return false;
     if(S._cardTypes[d.cardId])return false; // déjà en cache
@@ -1503,7 +1590,7 @@ async function openManualDeckBuilder() {
         }catch{}
       }));
     }
-    try{localStorage.setItem('ctcg_card_types',JSON.stringify(S._cardTypes));}catch{}
+    { const _ctt=S._cardTypes,_ctk=Object.keys(_ctt); if(_ctk.length>1200){const _pruned={};_ctk.slice(-1200).forEach(k=>_pruned[k]=_ctt[k]);S._cardTypes=_pruned;} try{localStorage.setItem('ctcg_card_types_v2',JSON.stringify(S._cardTypes));}catch{} }
   }
 
   const TFR = {fire:'Feu',water:'Eau',grass:'Plante',lightning:'Foudre',psychic:'Psy',fighting:'Combat',darkness:'Obscurité',metal:'Métal',fairy:'Fée',dragon:'Dragon',colorless:'Incolore'};
@@ -1530,7 +1617,7 @@ async function openManualDeckBuilder() {
   }
   function dc(){
     let p=0,t=0,e=0;
-    for(const c of Object.values(mdb.cards)){const cat=(gm(S.coll[c.cardId]||{})?.cat||'').toLowerCase();if(cat.includes('pok')||!cat)p+=c.qty;else if(cat.includes('nerg')||cat.includes('ener'))e+=c.qty;else t+=c.qty;}
+    for(const c of Object.values(mdb.cards)){const cat=(gm(S.coll[c.cardId]||{})?.cat||'').toLowerCase();if(cat.includes('pok'))p+=c.qty;else if(cat.includes('nerg')||cat.includes('ener'))e+=c.qty;else t+=c.qty;}
     for(const q of Object.values(mdb.energy))e+=q;
     return{pokemon:p,trainer:t,energy:e,total:p+t+e};
   }
@@ -1939,6 +2026,7 @@ function viewBattle(){
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
       <div class="bat-sep" style="flex:1">Tour ${bs.turn}</div>
       <button class="btn" data-act="nextturn" style="font-size:12px">Tour suivant ➜</button>
+      ${bs._undo ? `<button class="btn" data-act="undobattle" style="font-size:12px">↩ Annuler</button>` : ""}
       <button class="btn" data-act="endbattle" style="font-size:12px;color:#ef4444">Terminer</button>
     </div>
     ${renderPlayerArea(bs.players[1], 1)}
@@ -2015,11 +2103,25 @@ function viewLists(){
       }).join("")}</div>`
     : `${buyBtn}<p class="muted" style="font-size:13px">${rb ? "Aucune suggestion pour le moment." : "Gemini analyse tes extensions incomplètes et te recommande les cartes manquantes à fort potentiel."}</p>`;
 
+  /* ── 4. Cartes chez le gradeur ── */
+  const pending = Object.values(S.coll).filter(d => d.grade?.status === "pending" && d.grade?.co);
+  const atGraderHtml = pending.length
+    ? `<div class="list">${pending.map(d => `<button class="item" data-open="${esc(d.cardId)}">
+        ${d.image ? `<img src="${esc(d.image)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">` : `<span style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:inline-block"></span>`}
+        <span class="t"><b>${esc(d.name)}</b>
+          <small style="color:#f59e0b">⏳ En cours chez ${esc(d.grade.co)}</small>
+          ${d.grade.sentAt ? `<small class="muted">Envoyée le ${new Date(d.grade.sentAt).toLocaleDateString("fr-FR")}</small>` : ""}
+        </span>
+        <span class="p">${eur(cardValue(d))}</span>
+      </button>`).join("")}</div>`
+    : `<p class="muted" style="font-size:13px">Aucune carte en cours de grading. Ouvre une fiche et note l'envoi via le champ "Gradation → En cours chez…"</p>`;
+
   return `<div class="prof-intro">
     <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/101.png" alt="Prof. Chen" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23888%22 stroke-width=%222%22><circle cx=%2212%22 cy=%228%22 r=%224%22/><path d=%22M4 20c0-4 3.6-7 8-7s8 3 8 7%22/></svg>'">
     <p><strong>Professeur Chen</strong>Bienvenue, Dresseur ! Je suis là pour t'aider à valoriser ta collection. Découvre les cartes à grader, celles à acquérir, et surveille les hausses de prix.</p>
   </div>
   ${_aiSection("Alertes de valeur", "📈", alertsHtml)}
+  ${pending.length ? _aiSection(`Chez le gradeur (${pending.length})`, "⏳", atGraderHtml) : ""}
   ${_aiSection("Cartes à grader", "🎓", gradingHtml)}
   ${_aiSection("Cartes à acquérir", "🛒", buyHtml)}`;
 }
@@ -2221,7 +2323,7 @@ async function openCard(id, deck=[], dir=null){
           <div><b>${eur(p.cm?.avg7)}</b><span>Moy. 7 j</span></div>
           <div><b>${p.tp ? "$" + p.tp.toFixed(2) : "—"}</b><span>TCGplayer (US)</span></div>
         </div>
-        ${!p.cm ? `<p class="muted" style="font-size:12px;margin:0 0 4px">Pas de cote Cardmarket pour cette carte (sorties récentes ou cartes japonaises).</p>` : ""}
+        ${!p.cm ? `<p class="muted" style="font-size:12px;margin:0 0 4px">Pas de cote Cardmarket pour cette carte (sorties récentes ou cartes japonaises).</p>` : `<p class="muted" style="font-size:11px;margin:0 0 4px">Cotes Cardmarket${doc.priceAt ? " · " + timeAgo(doc.priceAt) : ""}${p.cm?.updated ? " · maj " + esc(p.cm.updated) : ""}</p>`}
         ${(() => {
           const hist = S.cardPriceHist[id] || [];
           if (hist.length >= 2) {
@@ -2246,6 +2348,11 @@ async function openCard(id, deck=[], dir=null){
       <a href="${ebayUrl}" target="_blank" rel="noopener">🔍 eBay ventes réussies</a>
       <a href="${ebayLive}" target="_blank" rel="noopener">🏷 eBay en vente</a>
     </div>
+    ${(c.weaknesses?.length || c.resistances?.length || c.retreat?.length) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 8px;font-size:12px">
+      ${c.weaknesses?.length ? `<span style="background:#ef444418;border:1px solid #ef4444;border-radius:8px;padding:3px 9px;color:#ef4444">⚡ Faiblesse : ${c.weaknesses.map(w=>`${esc(w.type)} ${w.value||""}`).join(", ")}</span>` : ""}
+      ${c.resistances?.length ? `<span style="background:#3b82f618;border:1px solid #3b82f6;border-radius:8px;padding:3px 9px;color:#3b82f6">🛡 Résistance : ${c.resistances.map(r=>`${esc(r.type)} ${r.value||""}`).join(", ")}</span>` : ""}
+      ${c.retreat?.length ? `<span style="background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:3px 9px">🏃 Retraite : ${c.retreat.length} ⚪</span>` : ""}
+    </div>` : ""}
     <h2>Dans mon classeur ${q ? `<span class="num" style="color:var(--fg)">· ${q}</span>` : ""}</h2>
     ${shown.map(([k,l]) => `<div class="vrow"><span>${l} <small class="muted num">${eur(prices[k] ?? prices.normal)}</small></span>
       <span class="step"><button data-dec="${k}" aria-label="Retirer ${l}">−</button><b>${doc.v?.[k]||0}</b><button data-inc="${k}" aria-label="Ajouter ${l}">+</button></span></div>`).join("")}
@@ -2294,8 +2401,8 @@ async function openCard(id, deck=[], dir=null){
       paid: $("#f-paid",scrim).value === "" ? null : +$("#f-paid",scrim).value, note: $("#f-note",scrim).value.trim(),
       grade: (() => { const gs = $("#f-gstatus",scrim)?.value||"", gc = gs ? ($("#f-gco",scrim)?.value||"") : ""; if (!gs||!gc) return null; if (gs==="pending") return {status:"pending",co:gc,sentAt:$("#f-gsentat",scrim)?.value||""}; return {status:"done",co:gc,note:$("#f-gnote",scrim)?.value?.trim()||"",value:$("#f-gval",scrim)?.value===""?null:+$("#f-gval",scrim)?.value}; })(),
       gradeRef: (() => { const ref={}; for (const co of ["PSA","PCA"]) for (const n of [10,9,8]) { const el=scrim.querySelector(`#gr-${co.toLowerCase()}${n}`); if (el&&el.value!=="") { if(!ref[co])ref[co]={}; ref[co][n]=+el.value; } } return Object.keys(ref).length?ref:(doc.gradeRef??null); })()};
-    if (!doc.addedAt && qty(doc)) doc.addedAt = Date.now();
-    if (qty(doc) || doc.wish) Store.save(doc); else if (S.coll[id]) Store.remove(id);
+    if (!doc.addedAt && (qty(doc) || doc.wish)) doc.addedAt = Date.now();
+    if (qty(doc) || doc.wish) { Store.save(doc); checkSetCompletion(doc.setId); } else if (S.coll[id]) Store.remove(id);
   };
   // Navigation dans la série
   const idx = deck.indexOf(id);
@@ -2341,6 +2448,7 @@ async function openCard(id, deck=[], dir=null){
     else if (t.id === "delbtn") { Store.remove(id); slideClose(); toast("Retirée"); }
     else if (t.id === "okbtn" || t.id === "closebtn") { commit(); slideClose(); }
   });
+  let _commitTimer;
   scrim.addEventListener("change", e => {
     if (e.target.id === "f-gstatus") {
       const v = e.target.value;
@@ -2349,7 +2457,8 @@ async function openCard(id, deck=[], dir=null){
       if (fw("fw-gpend")) fw("fw-gpend").style.display = v==="pending" ? "" : "none";
       if (fw("fw-gdone")) fw("fw-gdone").style.display = v==="done" ? "" : "none";
     }
-    commit();
+    clearTimeout(_commitTimer);
+    _commitTimer = setTimeout(() => commit(), 1200);
   });
 
   // Swipe physique : suit le doigt (horizontal = navigation, bas = fermer)
@@ -2401,8 +2510,10 @@ async function openCard(id, deck=[], dir=null){
 /* ---------- scan ---------- */
 
 /* ---- OCR (Tesseract.js) ---- */
-let _ocrWorker = null;
+let _ocrWorker = null, _ocrIdleTimer = null;
 async function getOcrWorker() {
+  clearTimeout(_ocrIdleTimer);
+  _ocrIdleTimer = setTimeout(() => { if (_ocrWorker) { try { _ocrWorker.terminate(); } catch {} _ocrWorker = null; } }, 90000);
   if (_ocrWorker) return _ocrWorker;
   if (!window.Tesseract) throw new Error("Tesseract.js non disponible");
   const _o = location.origin;
@@ -3223,6 +3334,7 @@ document.addEventListener("click", e => {
   if (act === "startbattle") { openBattleSetup(b.dataset.deckid||""); return; }
   if (act === "newdeck") { const id="deck_"+Date.now(); S.decks[id]={id,name:"Mon deck",cards:[],strategy:"",createdAt:Date.now()}; saveDeckState(); render(); return; }
   if (act === "endbattle") { endBattle(); return; }
+  if (act === "undobattle") { undoBattle(); return; }
   if (act === "nextturn") { nextTurn(); return; }
   if (act === "appdmg") { applyDmg(parseInt(b.dataset.pidx),b.dataset.slot,parseInt(b.dataset.dmg)); return; }
   if (act === "custdmg") { const v = parseInt(prompt("Dégâts à infliger :")||"0"); if (v>0) applyDmg(parseInt(b.dataset.pidx),b.dataset.slot,v); return; }
