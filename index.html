@@ -258,6 +258,11 @@ nav.tabs .scan .orb svg{width:24px;height:24px;color:#fff}
 .gref-cell{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1}
 .gref-cell>span{font-size:11px;color:var(--muted)}
 .gref-cell input{width:100%;border:1px solid var(--line);border-radius:6px;padding:5px 4px;font-size:13px;text-align:center;background:var(--surface);color:var(--fg)}
+/* Boutons d'attaque combat */
+.attack-btn{display:flex;align-items:center;gap:8px;width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--surface);color:var(--fg);font-size:13px;cursor:pointer;text-align:left;transition:background .15s}
+.attack-btn:hover{background:var(--sunk)}
+.attack-btn .adm{font-weight:700;color:var(--accent);font-size:13px;white-space:nowrap}
+.attack-btn .acost{font-size:10px;color:var(--muted);background:var(--sunk);border-radius:4px;padding:1px 5px}
 /* Scanner vidéo */
 #vscan-ov{position:fixed;inset:0;z-index:50;background:#000;display:flex;flex-direction:column}
 #vscan-vidwrap{flex:1;position:relative;min-height:0;overflow:hidden}
@@ -415,6 +420,7 @@ const Store = {
     try { const def = Object.fromEntries(ENERGY_TYPES.map(e=>[e.k,20])); const saved = JSON.parse(lsGet("energy")||"null"); S.energyStock = saved ? {...def,...saved} : def; } catch { S.energyStock = Object.fromEntries(ENERGY_TYPES.map(e=>[e.k,20])); }
     try { S.battleState = JSON.parse(lsGet("battle") || "null"); } catch { S.battleState = null; }
     try { S.deckEnergyFilter = JSON.parse(lsGet("deckEF") || "[]"); } catch { S.deckEnergyFilter = []; }
+    try { S.deckAdvice = JSON.parse(lsGet("deckAdvice") || "null"); } catch { S.deckAdvice = null; }
     render(); autoRefreshIfStale();
   },
   async save(card){
@@ -1155,17 +1161,24 @@ function openPokePicker(pIdx, slot){
     });
     scrim.querySelectorAll("[data-pc]").forEach(btn => btn.onclick = () => {
       const [cid,nm,img] = btn.dataset.pc.split("|");
-      sel = {cardId:cid, name:nm, image:img, maxHp:100};
+      sel = {cardId:cid, name:nm, image:img, maxHp:100, attacks:[]};
       render2();
-      // Try to auto-load HP
       loadCard(cid).then(data => {
         const hp = parseInt(data?.hp)||0;
         if (hp > 0) { const el = scrim.querySelector("#pp-hp"); if (el) { el.value = hp; sel.maxHp = hp; } }
+        if (data?.attacks?.length) {
+          sel.attacks = data.attacks.map(a=>({name:a.name, damage:parseInt(a.damage)||0, rawDamage:String(a.damage||"?"), cost:Array.isArray(a.cost)?a.cost:[]}));
+        }
       }).catch(()=>{});
     });
     const ppOk = scrim.querySelector("#pp-ok"); if (ppOk) ppOk.onclick = () => {
       const maxHp = parseInt(scrim.querySelector("#pp-hp").value)||100;
-      const poke = {cardId:sel.cardId, name:sel.name, image:sel.image, hp:maxHp, maxHp, conditions:[]};
+      const p = S.battleState.players[pIdx];
+      const already = [p.active, ...p.bench].filter(Boolean);
+      if (already.some(x=>x.cardId===sel.cardId)) {
+        if (!confirm(`${sel.name} est déjà en jeu pour ${p.name}. Mettre quand même ?`)) return;
+      }
+      const poke = {cardId:sel.cardId, name:sel.name, image:sel.image, hp:maxHp, maxHp, conditions:[], attacks:sel.attacks||[]};
       setSlot(pIdx, slot, poke);
       if (slot==="active") battleLog(`<b>${S.battleState.players[pIdx].name}</b> envoie <b>${poke.name}</b> au combat`);
       saveBattleState(); scrim.remove(); render();
@@ -1252,7 +1265,7 @@ async function generateDecks(){
     });
     const data = await res.json();
     if (!res.ok) S.deckAdvice={error:data.error||"Erreur serveur"};
-    else S.deckAdvice={decks:data.decks||[]};
+    else { S.deckAdvice={decks:data.decks||[]}; lsSet("deckAdvice", JSON.stringify(S.deckAdvice)); }
   } catch(e) { S.deckAdvice={error:e.message||"Réseau indisponible"}; }
   render();
 }
@@ -1319,14 +1332,32 @@ function viewDecks(){
     ${ef.length?`<small style="color:var(--accent);font-size:11px">Sélectionné : ${ef.join(" + ")}</small>`:`<small class="muted" style="font-size:11px">Aucun filtre — Gemini choisit les meilleurs types selon ta collection</small>`}
   </div>`;
 
+  // Cartes déjà utilisées dans des decks sauvegardés
+  const savedCardUse = {};
+  for (const deck of deckList) {
+    for (const c of deck.cards||[]) {
+      if (c.cardId) savedCardUse[c.cardId] = (savedCardUse[c.cardId]||0) + (c.qty||1);
+    }
+  }
+  function deckConflicts(d){
+    const conflicts = [];
+    for (const c of d.cards||[]) {
+      if (!c.owned || !c.cardId) continue;
+      const inColl = S.coll[c.cardId];
+      const available = inColl ? Object.values(inColl.v||{}).reduce((a,b)=>a+b,0) : 0;
+      const alreadyUsed = savedCardUse[c.cardId]||0;
+      if (alreadyUsed > 0 && alreadyUsed + c.qty > available) conflicts.push(c.name);
+    }
+    return conflicts;
+  }
+
   const aiHtml = da?.loading
     ? `<p class="muted"><span class="spinner"></span> Gemini analyse ta collection… (peut prendre 20 s)</p>`
     : da?.error
     ? `<div class="note" style="font-size:13px">Erreur : ${esc(da.error)}</div>`
     : da?.decks?.length
     ? `<div style="display:flex;flex-direction:column;gap:10px">${da.decks.map((d,i)=>{
-        const missCrit = d.missingCards?.filter(c=>c.critical);
-        const missOk = d.missingCards?.filter(c=>!c.critical);
+        const conflicts = deckConflicts(d);
         const ownedPoke = d.cards?.filter(c=>c.owned && c.isPokemon).length || 0;
         const totalCards = (d.cards||[]).reduce((s,c)=>s+c.qty,0) + (d.energy||[]).reduce((s,e)=>s+e.qty,0);
         return `<details class="deck-card" style="cursor:pointer">
@@ -1338,6 +1369,7 @@ function viewDecks(){
                 ${d.energy?.map(e=>`<span style="font-size:11px;background:var(--sunk);border-radius:10px;padding:2px 8px">${ENERGY_TYPES.find(t=>t.k===e.type)?.i||"⚡"} ${e.qty}</span>`).join("")||""}
                 <span style="font-size:11px;background:var(--sunk);border-radius:10px;padding:2px 8px">🃏 ${totalCards}/60</span>
                 ${d.missingCards?.length?`<span style="font-size:11px;background:#fef3c7;color:#92400e;border-radius:10px;padding:2px 8px">⚠️ ${d.missingCards.length} manquante(s)</span>`:`<span style="font-size:11px;background:#d1fae5;color:#065f46;border-radius:10px;padding:2px 8px">✅ 100% possédé</span>`}
+                ${conflicts.length?`<span style="font-size:11px;background:#fee2e2;color:#991b1b;border-radius:10px;padding:2px 8px">🔴 Conflit deck sauvegardé</span>`:""}
               </div>
             </div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;margin-top:3px"><path d="m6 9 6 6 6-6"/></svg>
@@ -1351,6 +1383,10 @@ function viewDecks(){
             ${d.missingCards?.length?`<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:8px 10px;margin-bottom:8px">
               <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:4px">⚠️ À se procurer :</div>
               ${d.missingCards.map(c=>`<div style="font-size:12px;margin-bottom:3px">• ${c.qty}× <b>${esc(c.name)}</b>${c.setName?` (${esc(c.setName)})`:""} <span style="color:var(--muted)">— ${esc(c.reason||"")}</span></div>`).join("")}
+            </div>`:""}
+            ${conflicts.length?`<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px">
+              <b style="color:#991b1b">🔴 Conflit avec un deck déjà sauvegardé :</b> ${conflicts.slice(0,3).map(esc).join(", ")}${conflicts.length>3?` +${conflicts.length-3}`:""}
+              <br><span style="color:#7f1d1d">Régénère les suggestions pour des decks sans chevauchement.</span>
             </div>`:""}
             <button class="btn primary" data-act="savedeck" data-didx="${i}" style="font-size:12px;width:100%">💾 Sauvegarder ce deck</button>
           </div>
@@ -1375,6 +1411,7 @@ function viewDecks(){
     </label>
     <small class="muted" style="font-size:11px">(si en double, 1 copie jouable)</small>
     <button class="btn primary" data-act="gendecks" style="font-size:12px;margin-left:auto">✨ Générer 10 decks</button>
+    ${Object.keys(savedCardUse).length?`<button class="btn" data-act="gendecks" style="font-size:12px" title="Régénère en tenant compte des decks déjà sauvegardés">🔄 Régénérer</button>`:""}
   </div>
   ${aiHtml || `<p class="muted" style="font-size:13px">Clique sur "Générer 10 decks" — Gemini compose les meilleures options depuis tes cartes possédées.</p>`}`;
 }
@@ -1404,13 +1441,22 @@ function renderPlayerArea(p, pIdx){
         </div>`;
       })();
 
+  const attacks = p.active?.attacks||[];
+  const attackHtml = attacks.length ? `<div style="display:flex;flex-direction:column;gap:5px;margin-top:6px">
+    <span style="font-size:11px;color:var(--muted);font-weight:600">Attaques</span>
+    ${attacks.map(a=>`<button class="attack-btn" data-act="useattack" data-pidx="${pIdx}" data-dmg="${a.damage}" data-aname="${esc(a.name)}">
+      <span style="flex:1;text-align:left">${esc(a.name)}${a.cost?.length?` <span class="acost">${a.cost.map(c=>c.slice(0,3)).join(" ")}</span>`:"" }</span>
+      <span class="adm">${a.rawDamage && a.rawDamage!=="?" ? a.rawDamage+" dmg" : "—"}</span>
+    </button>`).join("")}
+  </div>` : "";
+
   const dmgRow = p.active ? `<div class="dmg-row">
     <span style="font-size:11px;color:var(--muted);font-weight:600;align-self:center">Dégâts</span>
     ${[10,30,50,90].map(n=>`<button data-act="appdmg" data-pidx="${pIdx}" data-slot="active" data-dmg="${n}">−${n}</button>`).join("")}
     <button data-act="custdmg" data-pidx="${pIdx}" data-slot="active">−?</button>
     <button class="heal-btn" data-act="healpoke" data-pidx="${pIdx}" data-slot="active" data-heal="30">+30 ❤️</button>
     ${p.active?.hp===0 ? `<button class="ko-btn" data-act="kopoke" data-pidx="${pIdx}" title="${prizesForPoke(p.active.name)} récompense(s) pour l'adversaire">KO 💀 ×${prizesForPoke(p.active.name)}</button>` : ''}
-  </div>` : '';
+  </div>${attackHtml}` : '';
 
   const bench = Array.from({length:5}, (_,i) => {
     const b = p.bench[i];
@@ -2680,6 +2726,14 @@ document.addEventListener("click", e => {
   if (act === "custdmg") { const v = parseInt(prompt("Dégâts à infliger :")||"0"); if (v>0) applyDmg(parseInt(b.dataset.pidx),b.dataset.slot,v); return; }
   if (act === "healpoke") { healPoke(parseInt(b.dataset.pidx),b.dataset.slot,parseInt(b.dataset.heal||"10")); return; }
   if (act === "togglecond") { toggleCond(parseInt(b.dataset.pidx),b.dataset.cond); return; }
+  if (act === "useattack") {
+    const pIdx = parseInt(b.dataset.pidx), dmg = parseInt(b.dataset.dmg)||0, aname = b.dataset.aname;
+    const opp = S.battleState.players[1-pIdx];
+    if (!opp.active) { toast("Pas de Pokémon actif adverse !"); return; }
+    if (dmg > 0) applyDmg(1-pIdx, "active", dmg);
+    else battleLog(`T${S.battleState.turn} ⚡ <b>${S.battleState.players[pIdx].name}</b> utilise <b>${esc(aname)}</b> — dégâts variables, ajuste manuellement`);
+    return;
+  }
   if (act === "kopoke") { koPoke(parseInt(b.dataset.pidx)); return; }
   if (act === "takeprize") { takeprize(parseInt(b.dataset.pidx)); return; }
   if (act === "openpoke") { openPokePicker(parseInt(b.dataset.pidx),b.dataset.slot); return; }
