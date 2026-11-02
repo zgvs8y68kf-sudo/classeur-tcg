@@ -966,7 +966,7 @@ function viewScan(){
       <div class="row" style="justify-content:space-between"><b>${esc(f.det.name || "Carte")} <span class="muted num">${esc(f.det.number||"?")}${f.det.total?"/"+esc(f.det.total):""}</span></b>
       <div style="display:flex;align-items:center;gap:6px">
         ${f.added ? `<span class="up" style="font-weight:700">Ajoutée ✓</span>` : ""}
-        <button data-removescan="${i}:${k}" title="Retirer cette carte de la liste" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px 4px;line-height:1" aria-label="Supprimer">✕</button>
+        <button data-removescan="${i}:${k}" title="Retirer cette carte" style="background:#ef444422;border:1px solid #ef4444;color:#ef4444;border-radius:6px;cursor:pointer;font-size:14px;padding:3px 8px;line-height:1;font-weight:700" aria-label="Supprimer">✕</button>
       </div></div>
       ${f.cands.length ? `<div class="cand">${f.cands.slice(0,12).map((c,ci) => `<button data-pick="${i}:${k}:${ci}" aria-pressed="${f.sel===ci}"><img src="${esc(c.image ? c.image+"/low.webp" : "/_")}" data-set="${esc(c.setId)}" data-local="${esc(c.localId)}" alt="" loading="lazy" onerror="imgFb(this)"><small>${esc(S.catalog?.sets?.[c.setId]?.name || c.setId)}</small></button>`).join("")}</div>
       <div class="row"><select id="var-${i}-${k}" class="chip" aria-label="Variante">${VARIANTS.map(([v,l]) => `<option value="${v}" ${f.det.variant===v?"selected":""}>${l}</option>`).join("")}</select>
