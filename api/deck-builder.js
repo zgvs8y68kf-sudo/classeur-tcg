@@ -9,93 +9,83 @@ export default async function handler(req, res) {
     const { cards = [], energy = [], preferredTypes = [] } = req.body || {};
     if (!cards.length) { res.status(400).json({ error: "no_cards" }); return; }
 
-    const cardList = cards.map(c => `- [${c.cardId}] ${c.name} (${c.setId}) ×${c.qty}`).join("\n");
+    // Index des cartes possédées pour validation post-Gemini
+    const ownedById  = new Map(cards.map(c => [c.cardId, c]));
+    const norm = s => String(s||"").toLowerCase().replace(/[^a-z0-9éèêëàâùûîïôœç]/g,"").trim();
+    const ownedByName = new Map(cards.map(c => [norm(c.name), c]));
+
+    const cardList  = cards.map(c => `- [${c.cardId}] ${c.name} (${c.setId}) ×${c.qty}`).join("\n");
     const energyList = energy.map(e => `- ${e.type}: ${e.qty} cartes`).join("\n");
 
     const typesLine = preferredTypes.length
-      ? `\nTYPES D'ÉNERGIE IMPOSÉS : ${preferredTypes.join(" + ")}\nConstruis des decks qui utilisent UNIQUEMENT ces types (+ Incolore si nécessaire pour les attaques sans couleur).\n`
+      ? `\nTYPES D'ÉNERGIE IMPOSÉS : ${preferredTypes.join(" + ")}\nConstruis des decks qui utilisent UNIQUEMENT ces types (+ Incolore si nécessaire).\n`
       : "";
 
-    const prompt = `Tu es un expert du Pokémon TCG compétitif chargé de construire des decks pour un collectionneur.
+    // Mots-clés = cartes Dresseur (pas Pokémon)
+    const TRAINER_RE = /ball|belt|belt|potion|énergie|energy|professor|professeur|marnie|boss|iono|arven|nemona|penny|jacq|crispin|klara|korrina|guzma|lusamine|jesse|james|map|town|bicycle|escape|lure|fossil|cape|vest|dew|mail|timer|computer|pokédex|pokedex|binocles|potion|super|hyper|full|sac|rocher|caillou|stade|stadium|gym|cour|poing|sac de|rechargement|coupon|carte du|curiosité|éclat|lumière|grande/i;
 
-CARTES POSSÉDÉES PAR LE JOUEUR :
+    const prompt = `Tu es un expert du Pokémon TCG compétitif.
+
+CARTES POSSÉDÉES PAR LE JOUEUR (LISTE EXHAUSTIVE) :
 ${cardList}
 
 STOCK D'ÉNERGIES :
 ${energyList || "Énergies de Base disponibles en quantité illimitée pour tous les types."}
 ${typesLine}
 ════════════════════════════════════════════
-RÈGLE ABSOLUE N°1 — POKÉMON PRINCIPAL POSSÉDÉ
+LOI ABSOLUE — AUCUN POKÉMON DANS missingCards
 ════════════════════════════════════════════
-Le Pokémon CENTRAL de chaque deck (celui qui attaque et donne le nom au deck) DOIT
-être présent dans la liste des cartes possédées ci-dessus.
-→ NE PROPOSE JAMAIS un deck "Charizard ex" si le joueur n'a pas Charizard.
-→ NE PROPOSE JAMAIS un deck dont la pièce maîtresse est dans "missingCards".
-→ Construis chaque deck autour des Pokémon-star que le joueur POSSÈDE DÉJÀ.
+⛔ SI LE POKÉMON PRINCIPAL N'EST PAS DANS LA LISTE CI-DESSUS → NE PAS CRÉER CE DECK.
+⛔ missingCards ne doit contenir QUE des cartes Dresseur (Objets, Supporters, Stades).
+⛔ AUCUN Pokémon dans missingCards — ni le principal, ni une évolution, ni un support.
+⛔ Si une évolution du Pokémon-star manque, ne crée pas ce deck.
 
-RÈGLE ABSOLUE N°2 — CARTES MANQUANTES = SEULEMENT DES SUPPORTS
-════════════════════════════════════════════
-Les seules cartes qui peuvent figurer dans missingCards sont :
-  ✅ Dresseurs courants (Poké Ball, Super Ball, Pokédex, Professeur Magnolia, Marnie, Boss Orders, etc.)
-  ✅ Énergies Spéciales (Double Turbo Energy, Choice Belt, etc.) si vraiment utiles
-  ✅ Pokémon de base COMMUNS et peu coûteux (Bidoof, Ralts bas niveau pour alimenter une chaîne, etc.)
-  ❌ JAMAIS un Pokémon-ex, V, VMAX, VSTAR, GX, EX, Full Art, Alt Art dans missingCards
-  ❌ JAMAIS le Pokémon principal ou d'évolution rare dans missingCards
-  ❌ JAMAIS plus de 4 cartes manquantes par deck
+CONSÉQUENCE : si ton deck nécessite un Pokémon absent de la liste → supprime ce deck,
+propose-en un autre avec un Pokémon présent.
+
+RÈGLE DE STRUCTURE :
+• missingCards = uniquement : Poké Ball, Super Ball, Professeur, Marnie, Boss, Iono,
+  Objets de recherche, Énergies Spéciales. MAX 4 cartes manquantes par deck.
+• Tout Pokémon dans le deck DOIT avoir owned:true ET son cardId dans la liste.
 
 ════════════════════════════════════════════
-RÈGLES OFFICIELLES TCG (non négociables)
+RÈGLES OFFICIELLES TCG
 ════════════════════════════════════════════
-• 60 cartes EXACTEMENT (sum cards[] qty + sum energy[] qty = 60)
-• Max 4 exemplaires d'une même carte NON-ÉNERGIE (même nom = même carte)
-• Énergies de Base : ILLIMITÉES (Feu, Eau, Plante, Foudre, Psy, Combat, Obscurité, Métal, Incolore)
-• Énergies Spéciales : limitées à 4 exemplaires
-• Au moins 1 Pokémon de Base pour la main initiale (7 cartes)
-• 6 cartes Récompense mises de côté au début
-• Récompenses lors d'un KO : Pokémon normal = 1 · Pokémon-ex/GX/EX/V/VSTAR = 2 · VMAX/V-UNION/ESCOUADE = 3
+• 60 cartes EXACTEMENT · Max 4 copies d'une même carte non-énergie
+• Énergies de Base : illimitées · Énergies Spéciales : max 4
+• Au moins 1 Pokémon de Base requis · 6 cartes Récompense
 
-STRUCTURE RECOMMANDÉE :
-  • 10-16 Pokémon : 4-6 Pokémon de Base + leur(s) évolution(s) + support (Bibarel pour piocher, etc.)
-  • 30-36 Dresseurs : 8-10 Supporters + 12-16 Objets (chercheurs de cartes surtout) + 2-4 Stades
-  • 8-14 Énergies de Base (le minimum cohérent pour attaquer régulièrement)
+STRUCTURE RECOMMANDÉE (60 cartes) :
+  • ~12 Pokémon : Pokémon-star ×3-4 + support ×2-3 + pré-évolutions si nécessaire
+  • ~28 Dresseurs : Supporters ×8-10 + Objets ×14-16 + Stades ×2-3
+  • ~10-14 Énergies de Base
 
 ════════════════════════════════════════════
-MISSION : GÉNÈRE 10 DECKS DIFFÉRENTS ET COMPLETS
+MISSION : 10 DECKS COMPLETS, UNIQUEMENT AVEC LES CARTES POSSÉDÉES
 ════════════════════════════════════════════
-• Propose 10 decks variés exploitant différents Pokémon de la collection
-• Chaque deck doit être compétitif et cohérent avec ses propres synergies
-• Ordonne-les du plus exploitable (avec les cartes disponibles) au moins exploitable
-• Varie les archétypes : aggro rapide, contrôle, combo, mill, etc.
-• Si preferredTypes est défini, TOUS les decks doivent utiliser ces types
+• Varie les archétypes (aggro, contrôle, combo) et les Pokémon-star
+• Ordre : du plus jouable au moins jouable
+• Pour chaque deck : vérifie que sum(cards qty) + sum(energy qty) = 60
 
-POUR CHAQUE DECK :
-1. Identifie le Pokémon-star (il DOIT être possédé)
-2. Construis la liste EXACTE de 60 cartes (possédées + quelques supports manquants)
-3. Ne dépasse JAMAIS les quantités disponibles (×N dans la liste = max N copies)
-4. Vérifie que sum(cards qty) + sum(energy qty) = 60
-
-IMPORTANT : retourne UNIQUEMENT du JSON valide (aucun texte avant ou après) :
+JSON UNIQUEMENT (pas de texte avant/après) :
 {"decks":[{
-  "name":"Nom evocateur du deck",
-  "strategy":"Stratégie en 2-3 phrases — comment gagner avec ce deck",
-  "cards":[{"cardId":"id-exact-de-la-liste-ou-vide-si-manquant","name":"Nom carte","qty":4,"owned":true,"isPokemon":true}],
+  "name":"Nom du deck",
+  "strategy":"Stratégie en 2-3 phrases",
+  "cards":[{"cardId":"id-exact","name":"Nom","qty":4,"owned":true,"isPokemon":true}],
   "energy":[{"type":"Feu","qty":10}],
-  "missingCards":[{"name":"Dresseur manquant","setName":"Écarlate et Violet","qty":4,"reason":"Chercheur de cartes essentiel"}]
-}]}
-
-Contrôle final avant de répondre : pour chaque deck, fais le total (sum cards + sum energy) = 60.`;
-
+  "missingCards":[{"name":"Poké Ball","setName":"Écarlate et Violet","qty":4,"reason":"Chercheur essentiel","isPokemon":false}]
+}]}`;
 
     const payload = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { response_mime_type: "application/json", temperature: 0.3 }
+      generationConfig: { response_mime_type: "application/json", temperature: 0.2 }
     });
 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000);
     let gemRes = null, lastErr = "";
     try {
-      const models = ["gemini-3.1-flash-lite","gemini-3.5-flash-lite","gemini-3.6-flash","gemini-3.8-flash"];
+      const models = ["gemini-2.5-flash-lite","gemini-2.5-flash","gemini-2.0-flash","gemini-1.5-flash"];
       const races = models.map(model =>
         fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
           { method:"POST", headers:{"Content-Type":"application/json"}, body:payload, signal:ctrl.signal }
@@ -114,27 +104,57 @@ Contrôle final avant de répondre : pour chaque deck, fais le total (sum cards 
     let result;
     try { result = JSON.parse(text); } catch { result = {}; }
 
-    const decks = (result.decks || []).slice(0, 10).map(d => ({
-      name:        String(d.name || "").trim().slice(0, 60),
-      strategy:    String(d.strategy || "").trim().slice(0, 400),
-      cards:       (d.cards || []).slice(0, 60).map(c => ({
-        cardId:    String(c.cardId || "").trim().slice(0, 40),
-        name:      String(c.name   || "").trim().slice(0, 60),
-        qty:       Math.min(60, Math.max(1, parseInt(c.qty) || 1)),
-        owned:     !!c.owned,
-        isPokemon: !!c.isPokemon
-      })),
-      energy:      (d.energy || []).map(e => ({
-        type: String(e.type || "").trim().slice(0, 20),
-        qty:  Math.min(30, Math.max(0, parseInt(e.qty) || 0))
-      })),
-      missingCards:(d.missingCards || []).slice(0, 8).map(c => ({
-        name:    String(c.name    || "").trim().slice(0, 60),
-        setName: String(c.setName || "").trim().slice(0, 60),
-        qty:     Math.min(4, Math.max(1, parseInt(c.qty) || 1)),
-        reason:  String(c.reason  || "").trim().slice(0, 150)
-      }))
-    }));
+    // ── Validation serveur ───────────────────────────────────────────────────
+    function hasPokemonMissing(d) {
+      for (const mc of d.missingCards || []) {
+        // Gemini doit mettre isPokemon:false sur les Dresseurs
+        if (mc.isPokemon === true) return true;
+        // Heuristique de secours : si le nom ne ressemble pas à un Dresseur
+        if (!TRAINER_RE.test(String(mc.name||""))) return true;
+      }
+      return false;
+    }
+
+    function hasUnownedPokemon(d) {
+      for (const c of d.cards || []) {
+        if (!c.isPokemon) continue;
+        // Owned mais cardId inconnu
+        if (c.owned) {
+          const byId   = c.cardId ? ownedById.has(c.cardId) : false;
+          const byName = ownedByName.has(norm(c.name));
+          if (!byId && !byName) return true; // Prétend posséder une carte absente
+        }
+      }
+      return false;
+    }
+
+    const decks = (result.decks || [])
+      .filter(d => !hasPokemonMissing(d) && !hasUnownedPokemon(d))
+      .slice(0, 10)
+      .map(d => ({
+        name:     String(d.name || "").trim().slice(0, 60),
+        strategy: String(d.strategy || "").trim().slice(0, 400),
+        cards: (d.cards || []).slice(0, 60).map(c => ({
+          cardId:    String(c.cardId || "").trim().slice(0, 40),
+          name:      String(c.name   || "").trim().slice(0, 60),
+          qty:       Math.min(60, Math.max(1, parseInt(c.qty) || 1)),
+          owned:     !!c.owned,
+          isPokemon: !!c.isPokemon
+        })),
+        energy: (d.energy || []).map(e => ({
+          type: String(e.type || "").trim().slice(0, 20),
+          qty:  Math.min(30, Math.max(0, parseInt(e.qty) || 0))
+        })),
+        missingCards: (d.missingCards || [])
+          .filter(c => !c.isPokemon && TRAINER_RE.test(String(c.name||""))) // double filet
+          .slice(0, 4)
+          .map(c => ({
+            name:    String(c.name    || "").trim().slice(0, 60),
+            setName: String(c.setName || "").trim().slice(0, 60),
+            qty:     Math.min(4, Math.max(1, parseInt(c.qty) || 1)),
+            reason:  String(c.reason  || "").trim().slice(0, 150)
+          }))
+      }));
 
     res.json({ decks });
   } catch(e) {
