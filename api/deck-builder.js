@@ -15,7 +15,6 @@ export default async function handler(req, res) {
     const ownedByName = new Map(cards.map(c => [norm(c.name), c]));
 
     // Format compact : regroupe par nom (somme des quantités), trie par qty desc
-    // Garde l'ID de la carte la plus possédée pour la validation post-Gemini
     const byName = new Map();
     for (const c of cards) {
       const key = norm(c.name);
@@ -24,10 +23,10 @@ export default async function handler(req, res) {
       e.qty += c.qty;
       if (c.qty > (byName.get(key)._maxQty||0)) { e._maxQty = c.qty; e.cardId = c.cardId; e.setId = c.setId; }
     }
-    const cardList = [...byName.values()]
-      .sort((a,b) => b.qty - a.qty)
-      .map(c => `${c.name} ×${c.qty}`)
-      .join(", ");
+    const allCards = [...byName.values()].sort((a,b) => b.qty - a.qty);
+    // Sans filtre de type : limiter à 80 noms pour garder le prompt court
+    const filteredCards = preferredTypes.length ? allCards : allCards.slice(0, 80);
+    const cardList = filteredCards.map(c => `${c.name} ×${c.qty}`).join(", ");
     const energyList = energy.map(e => `- ${e.type}: ${e.qty} cartes`).join("\n");
 
     const typesLine = preferredTypes.length
@@ -74,7 +73,7 @@ STRUCTURE RECOMMANDÉE (60 cartes) :
   • ~10-14 Énergies de Base
 
 ════════════════════════════════════════════
-MISSION : 10 DECKS COMPLETS, UNIQUEMENT AVEC LES CARTES POSSÉDÉES
+MISSION : ${preferredTypes.length ? "3 DECKS CIBLÉS" : "5 DECKS COMPLETS"}, UNIQUEMENT AVEC LES CARTES POSSÉDÉES
 ════════════════════════════════════════════
 • Varie les archétypes (aggro, contrôle, combo) et les Pokémon-star
 • Ordre : du plus jouable au moins jouable
