@@ -1457,201 +1457,231 @@ function openDeckEditor(deckId){
   });
 }
 
-/* ── Deck Builder Manuel ───────────────────────────────── */
+/* ── Deck Builder Manuel (wizard multi-étapes) ─────────── */
 async function openManualDeckBuilder() {
   let mdb = {
+    step: 1,
     types: [...S.deckEnergyFilter],
-    cards: {},   // cardId → {cardId, name, qty}
-    energy: {},  // typeKey → qty
-    tab: 'pokemon',
+    cards: {},
+    energy: {},
     search: '',
-    _focusSearch: false,
+    deckName: 'Mon Deck',
+    _dir: 0,
   };
 
   const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:300;background:var(--bg);display:flex;flex-direction:column;overflow:hidden';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:300;background:var(--bg);overflow:hidden';
   document.body.appendChild(overlay);
-  overlay.innerHTML = `<div style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px"><span class="spinner" style="width:28px;height:28px;border-width:3px"></span><p style="color:var(--muted);font-size:14px">Chargement des cartes…</p></div>`;
+  overlay.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px"><div class="spinner" style="width:32px;height:32px;border-width:3px"></div><p style="color:var(--muted);font-size:14px">Analyse de ta collection…</p></div>`;
 
-  // Fetch TCGdex set metadata for all owned sets
   if (!S._cardMeta) S._cardMeta = {};
-  const ownedSetIds = [...new Set(Object.values(S.coll).filter(d => qty(d) > 0 && d.setId).map(d => d.setId))];
+  const ownedSetIds = [...new Set(Object.values(S.coll).filter(d=>qty(d)>0&&d.setId).map(d=>d.setId))];
   await Promise.allSettled(ownedSetIds.map(async sid => {
     if (S._cardMeta[sid]) return;
     try {
       const data = await j(`${API}/fr/sets/${sid}`);
-      if (data?.cards) {
-        S._cardMeta[sid] = {};
-        for (const c of data.cards) {
-          S._cardMeta[sid][String(c.localId)] = {
-            cat: c.category || 'Pokémon',
-            types: c.types || [],
-            stage: (c.stage || '').toLowerCase(),
-            hp: parseInt(c.hp) || 0,
-          };
-        }
-      }
+      if (data?.cards) { S._cardMeta[sid]={}; for(const c of data.cards) S._cardMeta[sid][String(c.localId)]={cat:c.category||'Pokémon',types:c.types||[],stage:(c.stage||'').toLowerCase(),hp:parseInt(c.hp)||0}; }
     } catch {}
   }));
 
-  function getMeta(card) { return S._cardMeta?.[card.setId]?.[String(card.localId)] || null; }
-
-  function deckCounts() {
-    let pokemon = 0, trainer = 0, energy = 0;
-    for (const c of Object.values(mdb.cards)) {
-      const meta = S.coll[c.cardId] ? getMeta(S.coll[c.cardId]) : null;
-      const cat = (meta?.cat || '').toLowerCase();
-      if (cat.includes('pok')) pokemon += c.qty;
-      else if (cat.includes('nerg') || cat.includes('ener')) energy += c.qty;
-      else trainer += c.qty;
-    }
-    for (const q of Object.values(mdb.energy)) energy += q;
-    return { pokemon, trainer, energy, total: pokemon + trainer + energy };
+  const TFR = {fire:'Feu',water:'Eau',grass:'Plante',lightning:'Foudre',psychic:'Psy',fighting:'Combat',darkness:'Obscurité',metal:'Métal',fairy:'Fée',dragon:'Dragon',colorless:'Incolore'};
+  const SS = {vmax:0,vstar:0,ex:0,gx:1,v:2,'stage 2':3,'stage2':3,'stage 1':4,'stage1':4,basic:5,'':5};
+  const SB = {vmax:{l:'VMAX',c:'#8b5cf6'},vstar:{l:'VSTAR',c:'#f59e0b'},ex:{l:'EX',c:'#ef4444'},gx:{l:'GX',c:'#3b82f6'},v:{l:'V',c:'#10b981'},'stage 2':{l:'S2',c:'#6366f1'},'stage2':{l:'S2',c:'#6366f1'},'stage 1':{l:'S1',c:'#94a3b8'},'stage1':{l:'S1',c:'#94a3b8'}};
+  function gm(card){return S._cardMeta?.[card.setId]?.[String(card.localId)]||null;}
+  function nT(t){return TFR[t.toLowerCase()]||t;}
+  function dc(){
+    let p=0,t=0,e=0;
+    for(const c of Object.values(mdb.cards)){const cat=(gm(S.coll[c.cardId]||{})?.cat||'').toLowerCase();if(cat.includes('pok')||!cat)p+=c.qty;else if(cat.includes('nerg')||cat.includes('ener'))e+=c.qty;else t+=c.qty;}
+    for(const q of Object.values(mdb.energy))e+=q;
+    return{pokemon:p,trainer:t,energy:e,total:p+t+e};
+  }
+  function cards(cat){
+    return Object.values(S.coll).filter(d=>qty(d)>0&&d.setId&&d.localId)
+      .map(d=>({...d,_q:qty(d),_m:gm(d)}))
+      .filter(d=>{const c=(d._m?.cat||'').toLowerCase();return cat==='pokemon'?(c.includes('pok')||!c):(!c.includes('pok')&&!c.includes('nerg')&&!c.includes('ener')&&!!c);})
+      .filter(d=>cat!=='pokemon'||!mdb.types.length||(()=>{const tt=(d._m?.types||[]).map(nT);return!tt.length||mdb.types.some(t=>tt.includes(t));})())
+      .sort((a,b)=>{const sd=(SS[a._m?.stage||'']??5)-(SS[b._m?.stage||'']??5);if(sd)return sd;const hd=(b._m?.hp||0)-(a._m?.hp||0);if(hd)return hd;return(b.prices?.normal||b.prices?.holo||0)-(a.prices?.normal||a.prices?.holo||0);});
   }
 
-  const STAGE_SCORE = { vmax:0, vstar:0, ex:0, gx:1, v:2, 'stage 2':3, 'stage2':3, 'stage 1':4, 'stage1':4, basic:5, '':5 };
-  const TYPE_FR_MAP = { fire:'Feu', water:'Eau', grass:'Plante', lightning:'Foudre', psychic:'Psy', fighting:'Combat', darkness:'Obscurité', metal:'Métal', fairy:'Fée', dragon:'Dragon', colorless:'Incolore' };
-  function normType(t) { return TYPE_FR_MAP[t.toLowerCase()] || t; }
-
-  const STAGE_BADGE = { vmax:{l:'VMAX',c:'#8b5cf6'}, vstar:{l:'VSTAR',c:'#f59e0b'}, ex:{l:'EX',c:'#ef4444'}, gx:{l:'GX',c:'#3b82f6'}, v:{l:'V',c:'#10b981'}, 'stage 2':{l:'Stade 2',c:'#6366f1'}, 'stage2':{l:'Stade 2',c:'#6366f1'}, 'stage 1':{l:'Stade 1',c:'#94a3b8'}, 'stage1':{l:'Stade 1',c:'#94a3b8'} };
-
-  function sortedCards(catFilter) {
-    return Object.values(S.coll)
-      .filter(d => qty(d) > 0 && d.setId && d.localId)
-      .map(d => ({ ...d, _qty: qty(d), _meta: getMeta(d) }))
-      .filter(d => {
-        const cat = (d._meta?.cat || '').toLowerCase();
-        if (catFilter === 'pokemon') return cat.includes('pok') || !cat;
-        if (catFilter === 'trainer') return !cat.includes('pok') && !cat.includes('nerg') && !cat.includes('ener') && !!cat;
-        return false;
-      })
-      .filter(d => {
-        if (catFilter !== 'pokemon' || !mdb.types.length) return true;
-        const types = (d._meta?.types || []).map(normType);
-        return !types.length || mdb.types.some(t => types.includes(t));
-      })
-      .sort((a, b) => {
-        const sa = STAGE_SCORE[a._meta?.stage || ''] ?? 5;
-        const sb = STAGE_SCORE[b._meta?.stage || ''] ?? 5;
-        if (sa !== sb) return sa - sb;
-        const hd = (b._meta?.hp || 0) - (a._meta?.hp || 0);
-        if (hd) return hd;
-        const pa = a.prices?.normal || a.prices?.holo || a.prices?.reverse || 0;
-        const pb = b.prices?.normal || b.prices?.holo || b.prices?.reverse || 0;
-        return pb - pa;
-      });
+  // ── Step renderers ───────────────────────────────────────
+  function sTypes(){
+    return `<div style="text-align:center;padding:24px 0 20px">
+      <div style="font-size:56px;margin-bottom:12px;line-height:1">⚡</div>
+      <h2 style="margin:0 0 8px;font-size:24px;font-weight:800">Quel type de deck ?</h2>
+      <p style="margin:0;font-size:14px;color:var(--muted)">Jusqu'à 2 types · <b style="color:var(--accent)">${mdb.types.length}</b>/2</p>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding-bottom:8px">
+      ${ENERGY_TYPES.map(e=>{const s=mdb.types.includes(e.k);return`<button data-mdb-type="${e.k}" style="padding:18px 8px;border-radius:18px;border:2.5px solid ${s?e.c:'var(--line)'};background:${s?e.c+'28':'var(--surface)'};cursor:pointer;text-align:center;position:relative;transition:border-color .15s,background .15s,transform .1s;transform:${s?'scale(1.04)':'scale(1)'}">
+        <div style="font-size:32px;margin-bottom:7px">${e.i}</div>
+        <div style="font-size:13px;font-weight:700;color:${s?e.c:'var(--fg)'}">${e.k}</div>
+        ${s?`<div style="position:absolute;top:8px;right:10px;font-size:15px;color:${e.c}">✓</div>`:''}
+      </button>`;}).join('')}
+    </div>
+    <p style="text-align:center;color:var(--muted);font-size:12px;margin-top:10px">💡 Sans sélection : tous types</p>`;
   }
 
-  function rebuild() {
-    const counts = deckCounts();
-    const rem = 60 - counts.total;
-    const cTotal = counts.total;
-
-    const header = `<div style="background:var(--surface);border-bottom:1px solid var(--line);padding:10px 14px;flex:none">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <button id="mdb-close" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--fg);padding:0;line-height:1;flex:none">✕</button>
-        <span style="font-weight:700;font-size:15px;flex:1">🃏 Créer un deck</span>
-        <button id="mdb-save" class="btn primary" style="font-size:12px;padding:5px 12px" ${cTotal === 0 ? 'disabled' : ''}>💾 Sauvegarder</button>
-      </div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">
-        <span style="border-radius:20px;padding:2px 9px;font-size:11px;background:#3b82f622;border:1px solid #3b82f6;color:#3b82f6">🐲 ${counts.pokemon}</span>
-        <span style="border-radius:20px;padding:2px 9px;font-size:11px;background:#f59e0b22;border:1px solid #f59e0b;color:#f59e0b">📋 ${counts.trainer}</span>
-        <span style="border-radius:20px;padding:2px 9px;font-size:11px;background:#22c55e22;border:1px solid #22c55e;color:#22c55e">⚡ ${counts.energy}</span>
-        <span style="border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;${cTotal===60?'background:#22c55e22;border:1px solid #22c55e;color:#22c55e':cTotal>60?'background:#ef444422;border:1px solid #ef4444;color:#ef4444':'background:var(--sunk);border:1px solid var(--line);color:var(--fg)'}">${cTotal}/60${rem===0?' ✓':''}</span>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px">
-        ${ENERGY_TYPES.map(e => { const sel = mdb.types.includes(e.k); return `<button data-mdb-type="${e.k}" style="font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid ${sel?e.c:'var(--line)'};background:${sel?e.c+'33':'transparent'};color:${sel?e.c:'var(--muted)'};cursor:pointer">${e.i} ${e.k}</button>`; }).join('')}
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:${mdb.tab!=='energy'?'8px':'0'}">
-        ${[['pokemon','🐲 Pokémon'],['trainer','📋 Dresseurs'],['energy','⚡ Énergies']].map(([t,l]) =>
-          `<button data-mdb-tab="${t}" style="padding:6px 4px;font-size:12px;border:none;background:${mdb.tab===t?'var(--accent)':'transparent'};color:${mdb.tab===t?'#fff':'var(--muted)'};cursor:pointer;font-weight:${mdb.tab===t?'700':'400'}">${l}</button>`
-        ).join('')}
-      </div>
-      ${mdb.tab!=='energy'?`<input id="mdb-search" placeholder="Rechercher…" value="${esc(mdb.search)}" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);font-size:13px">`:''}
-    </div>`;
-
-    let bodyHtml = '';
-    if (mdb.tab === 'energy') {
-      bodyHtml = ENERGY_TYPES.map(e => {
-        const inDeck = mdb.energy[e.k] || 0;
-        return `<div style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)">
-          <span style="font-size:22px;width:30px;text-align:center;flex:none">${e.i}</span>
-          <span style="flex:1;font-weight:600;font-size:14px">${e.k}</span>
-          <div style="display:flex;align-items:center;gap:8px;flex:none">
-            <button data-mdb-er="${e.k}" style="width:30px;height:30px;border-radius:50%;border:1px solid ${inDeck>0?'#ef4444':'var(--line)'};background:${inDeck>0?'#ef444420':'var(--surface)'};color:${inDeck>0?'#ef4444':'var(--muted)'};cursor:pointer;font-size:18px" ${inDeck===0?'disabled':''}>−</button>
-            <span style="min-width:28px;text-align:center;font-weight:700;font-size:16px">${inDeck}</span>
-            <button data-mdb-ea="${e.k}" style="width:30px;height:30px;border-radius:50%;border:1px solid ${rem>0?'#22c55e':'var(--line)'};background:${rem>0?'#22c55e20':'var(--surface)'};color:${rem>0?'#22c55e':'var(--muted)'};cursor:pointer;font-size:18px" ${rem<=0?'disabled':''}>+</button>
+  function sCards(cat){
+    let cc=cards(cat);
+    if(mdb.search){const q=mdb.search.toLowerCase();cc=cc.filter(c=>c.name.toLowerCase().includes(q));}
+    const{total}=dc(),rem=60-total;
+    return `<input id="mdb-s" placeholder="Rechercher…" value="${esc(mdb.search)}" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);font-size:14px;margin-bottom:12px">
+    ${!cc.length?`<div style="text-align:center;padding:48px 0;color:var(--muted)"><div style="font-size:48px;margin-bottom:12px">${cat==='pokemon'?'🐲':'📋'}</div><p>Aucune carte${mdb.types.length&&cat==='pokemon'?' pour ces types':''}</p></div>`:
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${cc.slice(0,60).map(card=>{
+        const id=mdb.cards[card.cardId]?.qty||0,mx=Math.min(4,card._q),ca=id<mx&&rem>0,b=SB[card._m?.stage||''],pr=card.prices?.normal||card.prices?.holo||card.prices?.reverse||0;
+        return`<div data-cr="${esc(card.cardId)}" style="border-radius:14px;overflow:hidden;background:var(--surface);border:2.5px solid ${id>0?'var(--accent)':'var(--line)'};position:relative;transition:border-color .15s">
+          ${card.image?`<div style="background:var(--sunk);aspect-ratio:2.5/3.5;overflow:hidden"><img src="${card.image}/low.webp" style="width:100%;height:100%;object-fit:contain" loading="lazy"></div>`:`<div style="aspect-ratio:2.5/3.5;background:var(--sunk);display:flex;align-items:center;justify-content:center;font-size:32px">${cat==='pokemon'?'🐲':'📋'}</div>`}
+          ${b?`<span style="position:absolute;top:6px;left:6px;font-size:9px;padding:2px 6px;border-radius:5px;background:${b.c};color:#fff;font-weight:800">${b.l}</span>`:''}
+          ${id>0?`<span data-dk style="position:absolute;top:6px;right:6px;background:var(--accent);color:#fff;border-radius:14px;padding:1px 8px;font-size:12px;font-weight:800">×${id}</span>`:''}
+          <div style="padding:7px">
+            <div style="font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px">${esc(card.name)}</div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:7px">${card._m?.hp?card._m.hp+'PV · ':''}×${card._q}${pr?' · '+pr.toFixed(2)+'€':''}</div>
+            <div style="display:flex;gap:5px">
+              <button data-mdb-cr="${esc(card.cardId)}" style="flex:1;height:30px;border-radius:8px;border:1.5px solid ${id>0?'#ef4444':'var(--line)'};background:${id>0?'#ef444420':'var(--sunk)'};color:${id>0?'#ef4444':'var(--muted)'};cursor:pointer;font-size:17px;font-weight:700" ${id===0?'disabled':''}>−</button>
+              <button data-mdb-ca="${esc(card.cardId)}" data-mdb-name="${esc(card.name)}" style="flex:1;height:30px;border-radius:8px;border:1.5px solid ${ca?'var(--accent)':'var(--line)'};background:${ca?'var(--accent)20':'var(--sunk)'};color:${ca?'var(--accent)':'var(--muted)'};cursor:pointer;font-size:17px;font-weight:700" ${!ca?'disabled':''}>+</button>
+            </div>
           </div>
         </div>`;
-      }).join('');
-    } else {
-      let cards = sortedCards(mdb.tab);
-      if (mdb.search) { const q = mdb.search.toLowerCase(); cards = cards.filter(c => c.name.toLowerCase().includes(q)); }
-      if (!cards.length) {
-        bodyHtml = `<p class="muted" style="text-align:center;padding:30px 20px;font-size:13px">Aucune carte${mdb.types.length ? ' pour ces types' : ''}</p>`;
-      } else {
-        bodyHtml = cards.slice(0, 100).map(card => {
-          const inDeck = mdb.cards[card.cardId]?.qty || 0;
-          const maxQty = Math.min(4, card._qty);
-          const badge = STAGE_BADGE[card._meta?.stage || ''];
-          const price = card.prices?.normal || card.prices?.holo || card.prices?.reverse || 0;
-          const typeIcons = (card._meta?.types || []).slice(0, 2).map(t => { const e = ENERGY_TYPES.find(e => e.k === normType(t)); return e ? `<span style="font-size:11px">${e.i}</span>` : ''; }).join('');
-          return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)">
-            ${card.image?`<img src="${card.image}/low.webp" style="width:38px;height:52px;object-fit:contain;border-radius:3px;flex:none" loading="lazy">`:`<div style="width:38px;height:52px;background:var(--sunk);border-radius:3px;flex:none"></div>`}
-            <div style="flex:1;min-width:0">
-              <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-                ${badge?`<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:${badge.c};color:#fff;font-weight:700;flex:none">${badge.l}</span>`:''}
-                <span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(card.name)}</span>
-                ${typeIcons}
-              </div>
-              <div style="font-size:11px;color:var(--muted);margin-top:1px">${card._meta?.hp?card._meta.hp+' PV · ':''}×${card._qty} possédée${card._qty>1?'s':''}${price?' · '+price.toFixed(2)+'€':''}</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:5px;flex:none">
-              <button data-mdb-cr="${esc(card.cardId)}" style="width:28px;height:28px;border-radius:50%;border:1px solid ${inDeck>0?'#ef4444':'var(--line)'};background:${inDeck>0?'#ef444420':'var(--surface)'};color:${inDeck>0?'#ef4444':'var(--muted)'};cursor:pointer;font-size:18px" ${inDeck===0?'disabled':''}>−</button>
-              <span style="min-width:22px;text-align:center;font-weight:700;font-size:14px">${inDeck}</span>
-              <button data-mdb-ca="${esc(card.cardId)}" data-mdb-name="${esc(card.name)}" style="width:28px;height:28px;border-radius:50%;border:1px solid ${inDeck<maxQty&&rem>0?'#22c55e':'var(--line)'};background:${inDeck<maxQty&&rem>0?'#22c55e20':'var(--surface)'};color:${inDeck<maxQty&&rem>0?'#22c55e':'var(--muted)'};cursor:pointer;font-size:18px" ${inDeck>=maxQty||rem<=0?'disabled':''}>+</button>
-            </div>
-          </div>`;
-        }).join('');
-        if (cards.length > 100) bodyHtml += `<p class="muted" style="text-align:center;padding:10px;font-size:12px">…${cards.length-100} de plus — utilisez la recherche</p>`;
-      }
-    }
-
-    overlay.innerHTML = `${header}<div style="flex:1;overflow-y:auto;padding:0 14px 80px">${bodyHtml}</div>`;
-
-    overlay.querySelector('#mdb-close')?.addEventListener('click', () => overlay.remove());
-    overlay.querySelector('#mdb-save')?.addEventListener('click', () => {
-      const name = prompt('Nom du deck ?', 'Mon Deck Manuel') || 'Mon Deck Manuel';
-      const cards = Object.values(mdb.cards).filter(c => c.qty > 0).map(c => {
-        const collCard = S.coll[c.cardId];
-        const meta = collCard ? getMeta(collCard) : null;
-        const cat = (meta?.cat || '').toLowerCase();
-        const isPokemon = cat.includes('pok') || !cat;
-        return { cardId: c.cardId, name: c.name, image: collCard?.image || '', qty: c.qty, owned: true, isPokemon };
-      });
-      const energy = Object.entries(mdb.energy).filter(([,q]) => q > 0).map(([t,q]) => ({ type: t, qty: q }));
-      const id = 'deck_' + Date.now();
-      S.decks[id] = { id, name, cards, energy, strategy: 'Deck créé manuellement', createdAt: Date.now() };
-      saveDeckState(); overlay.remove(); toast(`Deck "${name}" sauvegardé !`); render();
-    });
-
-    overlay.querySelector('#mdb-search')?.addEventListener('input', e => { mdb.search = e.target.value; mdb._focusSearch = true; rebuild(); });
-
-    overlay.addEventListener('click', e => {
-      const b = e.target.closest('[data-mdb-type],[data-mdb-tab],[data-mdb-ca],[data-mdb-cr],[data-mdb-ea],[data-mdb-er]');
-      if (!b) return;
-      if (b.dataset.mdbType) { const t = b.dataset.mdbType; mdb.types = mdb.types.includes(t) ? mdb.types.filter(x=>x!==t) : mdb.types.length < 2 ? [...mdb.types, t] : mdb.types; rebuild(); return; }
-      if (b.dataset.mdbTab) { mdb.tab = b.dataset.mdbTab; mdb.search = ''; rebuild(); return; }
-      if (b.dataset.mdbCa) { const cid = b.dataset.mdbCa, nm = b.dataset.mdbName||'', mx = Math.min(4, qty(S.coll[cid]||{})); if (!mdb.cards[cid]) mdb.cards[cid]={cardId:cid,name:nm,qty:0}; if(mdb.cards[cid].qty<mx) mdb.cards[cid].qty++; rebuild(); return; }
-      if (b.dataset.mdbCr) { const cid = b.dataset.mdbCr; if(mdb.cards[cid]){mdb.cards[cid].qty--; if(!mdb.cards[cid].qty) delete mdb.cards[cid];} rebuild(); return; }
-      if (b.dataset.mdbEa) { const t = b.dataset.mdbEa; mdb.energy[t]=(mdb.energy[t]||0)+1; rebuild(); return; }
-      if (b.dataset.mdbEr) { const t = b.dataset.mdbEr; if(mdb.energy[t]>0) mdb.energy[t]--; if(!mdb.energy[t]) delete mdb.energy[t]; rebuild(); return; }
-    });
-
-    if (mdb._focusSearch) { mdb._focusSearch = false; const inp = overlay.querySelector('#mdb-search'); if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } }
+      }).join('')}
+    </div>${cc.length>60?`<p class="muted" style="text-align:center;padding:14px;font-size:12px">…${cc.length-60} de plus — recherche</p>`:''}` }`;
   }
 
-  rebuild();
+  function sEnergy(){
+    const{total}=dc(),rem=60-total;
+    return`<div style="text-align:center;padding:24px 0 20px">
+      <div style="font-size:56px;margin-bottom:12px;line-height:1">⚡</div>
+      <h2 style="margin:0 0 8px;font-size:24px;font-weight:800">Énergies de base</h2>
+      <p style="margin:0;font-size:14px;color:var(--muted)">${rem>0?`<b style="color:var(--accent)">${rem}</b> carte${rem>1?'s':''} à placer`:rem===0?'<b style="color:#22c55e">Deck complet !</b>':'<b style="color:#ef4444">Trop de cartes</b>'}</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${ENERGY_TYPES.map(e=>{const n=mdb.energy[e.k]||0,p=mdb.types.includes(e.k);
+      return`<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:14px;border:2px solid ${p?e.c:'var(--line)'};background:${p?e.c+'14':'var(--surface)'}">
+        <span style="font-size:26px;width:32px;text-align:center;flex:none">${e.i}</span>
+        <span style="flex:1;font-weight:600;font-size:14px;color:${p?e.c:'var(--fg)'}">${e.k}${p?' ⭐':''}</span>
+        <button data-mdb-er="${e.k}" style="width:36px;height:36px;border-radius:50%;border:2px solid ${n>0?'#ef4444':'var(--line)'};background:${n>0?'#ef444420':'var(--surface)'};color:${n>0?'#ef4444':'var(--muted)'};cursor:pointer;font-size:22px;font-weight:700" ${n===0?'disabled':''}>−</button>
+        <span style="min-width:32px;text-align:center;font-weight:800;font-size:20px">${n}</span>
+        <button data-mdb-ea="${e.k}" style="width:36px;height:36px;border-radius:50%;border:2px solid ${rem>0?e.c:'var(--line)'};background:${rem>0?e.c+'20':'var(--surface)'};color:${rem>0?e.c:'var(--muted)'};cursor:pointer;font-size:22px;font-weight:700" ${rem<=0?'disabled':''}>+</button>
+      </div>`;}).join('')}
+    </div>`;
+  }
+
+  function sSummary(){
+    const{pokemon,trainer,energy,total}=dc(),ok=total===60;
+    const list=[...Object.values(mdb.cards).filter(c=>c.qty>0).sort((a,b)=>(SS[gm(S.coll[a.cardId]||{})?.stage||'']??5)-(SS[gm(S.coll[b.cardId]||{})?.stage||'']??5)),...Object.entries(mdb.energy).filter(([,q])=>q>0).map(([t,q])=>({name:`${ENERGY_TYPES.find(e=>e.k===t)?.i||'⚡'} Énergie ${t}`,qty:q}))];
+    return`<div style="text-align:center;padding:20px 0 18px">
+      <div style="font-size:60px;margin-bottom:10px;line-height:1">${ok?'🏆':'🃏'}</div>
+      <h2 style="margin:0 0 4px;font-size:24px;font-weight:800">${ok?'Deck prêt !':'Résumé du deck'}</h2>
+    </div>
+    <input id="mdb-nm" value="${esc(mdb.deckName)}" placeholder="Nom du deck" style="width:100%;box-sizing:border-box;padding:11px 14px;border:2.5px solid var(--accent);border-radius:14px;background:var(--surface);color:var(--fg);font-size:16px;font-weight:700;text-align:center;margin-bottom:14px">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+      ${[['🐲',pokemon,'Pokémon','#3b82f6'],['📋',trainer,'Dresseurs','#f59e0b'],['⚡',energy,'Énergies','#22c55e'],[ok?'✅':'⚠️',total+'/60','Total',ok?'#22c55e':total>60?'#ef4444':'var(--fg)']].map(([i,v,l,c])=>`<div style="text-align:center;padding:12px 4px;background:var(--surface);border-radius:12px;border:1px solid var(--line)"><div style="font-size:11px;margin-bottom:4px">${i}</div><div style="font-size:17px;font-weight:800;color:${c}">${v}</div><div style="font-size:9px;color:var(--muted);margin-top:2px">${l}</div></div>`).join('')}
+    </div>
+    ${total!==60?`<div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:12px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:#92400e">⚠️ ${total<60?`Il manque <b>${60-total}</b> carte${60-total>1?'s':''}`:total-60+' carte(s) en trop'} — tu pourras modifier après sauvegarde</div>`:''}
+    ${list.length?`<div style="background:var(--surface);border-radius:12px;border:1px solid var(--line);padding:10px 12px;max-height:200px;overflow-y:auto"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">📋 Composition (${total})</div>${list.map(c=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;border-bottom:1px solid var(--line)">${esc(c.name)}<span style="color:var(--muted)">×${c.qty}</span></div>`).join('')}</div>`:''}`;
+  }
+
+  function stepHtml(){switch(mdb.step){case 1:return sTypes();case 2:return sCards('pokemon');case 3:return sCards('trainer');case 4:return sEnergy();case 5:return sSummary();default:return '';}}
+
+  // ── Build & animate ──────────────────────────────────────
+  function buildOverlay(){
+    const{total}=dc(),ok=total===60,over=total>60;
+    const s=mdb.step,d=mdb._dir,tx=d>0?'15%':d<0?'-15%':'0';
+    const LABELS=['Types','Pokémon','Dresseurs','Énergies','Résumé'];
+    overlay.innerHTML=`<div id="mdb-in" style="height:100%;display:flex;flex-direction:column;${d!==0?`transform:translateX(${tx});opacity:0;`:''}">
+      <div style="background:var(--surface);border-bottom:1px solid var(--line);padding:10px 14px 8px;flex:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <button id="mdb-x" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--fg);padding:0;flex:none;line-height:1">✕</button>
+          <div style="flex:1;display:flex;justify-content:center;align-items:center;gap:3px">
+            ${LABELS.map((_,i)=>`<div style="height:5px;border-radius:3px;background:${s>i+1?'var(--accent)':s===i+1?'var(--accent)':'var(--line)'};width:${s===i+1?'20px':'7px'};opacity:${s===i+1?1:s>i+1?0.55:0.25};transition:all .3s ease"></div>`).join('')}
+          </div>
+          <span id="mdb-cnt" style="border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;${ok?'background:#22c55e22;border:1px solid #22c55e;color:#22c55e':over?'background:#ef444422;border:1px solid #ef4444;color:#ef4444':'background:var(--sunk);border:1px solid var(--line);color:var(--fg)'}">${total}/60</span>
+        </div>
+        <div style="text-align:center;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">${LABELS[s-1]}</div>
+      </div>
+      <div id="mdb-body" style="flex:1;overflow-y:auto;padding:0 14px 16px">${stepHtml()}</div>
+      <div style="background:var(--surface);border-top:1px solid var(--line);padding:12px 14px;flex:none;display:flex;gap:8px">
+        ${s>1?`<button id="mdb-bk" class="btn" style="flex:1;padding:12px;font-size:14px">← Retour</button>`:`<button id="mdb-cl" class="btn" style="flex:1;padding:12px;font-size:14px">Annuler</button>`}
+        ${s<5?`<button id="mdb-nx" class="btn primary" style="flex:2;padding:12px;font-size:14px">Suivant →</button>`:`<button id="mdb-sv" class="btn primary" style="flex:2;padding:12px;font-size:15px;font-weight:700">💾 Sauvegarder</button>`}
+      </div>
+    </div>`;
+    if(d!==0){mdb._dir=0;requestAnimationFrame(()=>{const n=overlay.querySelector('#mdb-in');if(n){n.style.transition='transform .25s cubic-bezier(.22,.68,0,1.2),opacity .2s ease';n.style.transform='translateX(0)';n.style.opacity='1';}});}
+    bindAll();
+  }
+
+  function bindAll(){
+    overlay.querySelector('#mdb-x')?.addEventListener('click',()=>overlay.remove());
+    overlay.querySelector('#mdb-cl')?.addEventListener('click',()=>overlay.remove());
+    overlay.querySelector('#mdb-bk')?.addEventListener('click',()=>go(mdb.step-1,-1));
+    overlay.querySelector('#mdb-nx')?.addEventListener('click',()=>go(mdb.step+1,1));
+    overlay.querySelector('#mdb-sv')?.addEventListener('click',save);
+    const body=overlay.querySelector('#mdb-body');if(!body)return;
+    body.querySelector('#mdb-s')?.addEventListener('input',e=>{mdb.search=e.target.value;rb(true);});
+    body.querySelector('#mdb-nm')?.addEventListener('input',e=>{mdb.deckName=e.target.value;});
+    body.addEventListener('click',handleClick);
+  }
+
+  function handleClick(e){
+    const b=e.target.closest('[data-mdb-type],[data-mdb-ca],[data-mdb-cr],[data-mdb-ea],[data-mdb-er]');
+    if(!b)return;e.stopPropagation();
+    if(b.dataset.mdbType){const t=b.dataset.mdbType;mdb.types=mdb.types.includes(t)?mdb.types.filter(x=>x!==t):mdb.types.length<2?[...mdb.types,t]:mdb.types;rb(false);return;}
+    if(b.dataset.mdbCa){const cid=b.dataset.mdbCa,nm=b.dataset.mdbName||S.coll[cid]?.name||'',mx=Math.min(4,qty(S.coll[cid]||{}));if(!mdb.cards[cid])mdb.cards[cid]={cardId:cid,name:nm,qty:0};if(mdb.cards[cid].qty<mx){mdb.cards[cid].qty++;bumpCard(cid);}return;}
+    if(b.dataset.mdbCr){const cid=b.dataset.mdbCr;if(mdb.cards[cid]){mdb.cards[cid].qty--;if(!mdb.cards[cid].qty)delete mdb.cards[cid];bumpCard(cid);}return;}
+    if(b.dataset.mdbEa){mdb.energy[b.dataset.mdbEa]=(mdb.energy[b.dataset.mdbEa]||0)+1;rb(false);return;}
+    if(b.dataset.mdbEr){const t=b.dataset.mdbEr;if(mdb.energy[t]>0)mdb.energy[t]--;if(!mdb.energy[t])delete mdb.energy[t];rb(false);return;}
+  }
+
+  function bumpCard(cid){
+    const row=overlay.querySelector(`[data-cr="${cid}"]`);if(!row)return;
+    const n=mdb.cards[cid]?.qty||0,mx=Math.min(4,qty(S.coll[cid]||{})),rem=60-dc().total,ca=n<mx&&rem>0;
+    row.style.borderColor=n>0?'var(--accent)':'var(--line)';
+    let dk=row.querySelector('[data-dk]');
+    if(n>0){if(!dk){dk=document.createElement('span');dk.dataset.dk='';dk.style.cssText='position:absolute;top:6px;right:6px;background:var(--accent);color:#fff;border-radius:14px;padding:1px 8px;font-size:12px;font-weight:800';row.appendChild(dk);}dk.textContent='×'+n;}else if(dk)dk.remove();
+    const cr=row.querySelector('[data-mdb-cr]'),caa=row.querySelector('[data-mdb-ca]');
+    if(cr){cr.disabled=n===0;cr.style.borderColor=n>0?'#ef4444':'var(--line)';cr.style.background=n>0?'#ef444420':'var(--sunk)';cr.style.color=n>0?'#ef4444':'var(--muted)';}
+    if(caa){caa.disabled=!ca;caa.style.borderColor=ca?'var(--accent)':'var(--line)';caa.style.background=ca?'var(--accent)20':'var(--sunk)';caa.style.color=ca?'var(--accent)':'var(--muted)';}
+    // if rem just hit 0 or came back, update all add buttons
+    if(!ca&&rem<=0){overlay.querySelectorAll('[data-mdb-ca]').forEach(btn=>{if(!btn.disabled){btn.disabled=true;btn.style.borderColor='var(--line)';btn.style.background='var(--sunk)';btn.style.color='var(--muted)';}});}
+    else if(ca&&rem>0){overlay.querySelectorAll('[data-cr]').forEach(r=>{const rc=r.dataset.cr,ri=mdb.cards[rc]?.qty||0,rmx=Math.min(4,qty(S.coll[rc]||{})),rca=ri<rmx&&rem>0,rcaBtn=r.querySelector('[data-mdb-ca]');if(rcaBtn){rcaBtn.disabled=!rca;rcaBtn.style.borderColor=rca?'var(--accent)':'var(--line)';rcaBtn.style.background=rca?'var(--accent)20':'var(--sunk)';rcaBtn.style.color=rca?'var(--accent)':'var(--muted)';}});}
+    bump();
+  }
+
+  function bump(){
+    const el=overlay.querySelector('#mdb-cnt');if(!el)return;
+    const{total}=dc(),ok=total===60,ov=total>60;
+    el.textContent=total+'/60';
+    el.style.cssText=`border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;transition:transform .15s ease;${ok?'background:#22c55e22;border:1px solid #22c55e;color:#22c55e':ov?'background:#ef444422;border:1px solid #ef4444;color:#ef4444':'background:var(--sunk);border:1px solid var(--line);color:var(--fg)'}`;
+    el.style.transform='scale(1.3)';requestAnimationFrame(()=>{el.style.transform='scale(1)';});
+  }
+
+  function rb(keep){
+    const body=overlay.querySelector('#mdb-body');if(!body)return;
+    const sc=keep?body.scrollTop:0;body.innerHTML=stepHtml();body.scrollTop=sc;
+    const inp=body.querySelector('#mdb-s');
+    if(inp){inp.addEventListener('input',e=>{mdb.search=e.target.value;rb(true);});if(mdb.search){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}}
+    body.querySelector('#mdb-nm')?.addEventListener('input',e=>{mdb.deckName=e.target.value;});
+    body.removeEventListener('click',handleClick);body.addEventListener('click',handleClick);
+  }
+
+  function go(n,dir){
+    if(n<1||n>5)return;
+    const inner=overlay.querySelector('#mdb-in');
+    if(!inner){mdb.step=n;mdb.search='';mdb._dir=dir;buildOverlay();return;}
+    inner.style.transition='transform .18s ease,opacity .18s ease';
+    inner.style.transform=`translateX(${dir>0?'-15%':'15%'})`;
+    inner.style.opacity='0';inner.style.pointerEvents='none';
+    setTimeout(()=>{mdb.step=n;mdb.search='';mdb._dir=dir;buildOverlay();},180);
+  }
+
+  function save(){
+    const name=(mdb.deckName||'').trim()||'Mon Deck Manuel';
+    const cs=Object.values(mdb.cards).filter(c=>c.qty>0).map(c=>{const cat=(gm(S.coll[c.cardId]||{})?.cat||'').toLowerCase();return{cardId:c.cardId,name:c.name,image:S.coll[c.cardId]?.image||'',qty:c.qty,owned:true,isPokemon:cat.includes('pok')||!cat};});
+    const en=Object.entries(mdb.energy).filter(([,q])=>q>0).map(([t,q])=>({type:t,qty:q}));
+    const id='deck_'+Date.now();
+    S.decks[id]={id,name:name,cards:cs,energy:en,strategy:'Deck créé manuellement',createdAt:Date.now()};
+    saveDeckState();overlay.remove();toast(`Deck "${name}" sauvegardé !`);render();
+  }
+
+  buildOverlay();
 }
 
 /* ── VIEW : Decks ──────────────────────────────────────── */
