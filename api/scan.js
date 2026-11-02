@@ -47,10 +47,10 @@ Réponds UNIQUEMENT en JSON valide avec ces 4 champs, aucun autre texte.`;
     let gemRes = null, lastErr = "";
     try {
       const endpoints = [
+        { m:"gemini-3.6-flash", v:"v1beta" },
+        { m:"gemini-3.8-flash", v:"v1beta" },
         { m:"gemini-3.1-flash-lite", v:"v1beta" },
         { m:"gemini-flash-latest", v:"v1beta" },
-        { m:"gemini-3.5-flash-lite", v:"v1beta" },
-        { m:"gemini-3.5-flash", v:"v1beta" },
       ];
       const races = endpoints.map(({m,v}) =>
         fetch(

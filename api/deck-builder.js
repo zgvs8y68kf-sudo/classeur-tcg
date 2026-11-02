@@ -36,57 +36,15 @@ export default async function handler(req, res) {
     // Mots-clés = cartes Dresseur (pas Pokémon)
     const TRAINER_RE = /ball|belt|belt|potion|énergie|energy|professor|professeur|marnie|boss|iono|arven|nemona|penny|jacq|crispin|klara|korrina|guzma|lusamine|jesse|james|map|town|bicycle|escape|lure|fossil|cape|vest|dew|mail|timer|computer|pokédex|pokedex|binocles|potion|super|hyper|full|sac|rocher|caillou|stade|stadium|gym|cour|poing|sac de|rechargement|coupon|carte du|curiosité|éclat|lumière|grande/i;
 
-    const prompt = `Tu es un expert du Pokémon TCG compétitif.
+    const prompt = `Expert Pokémon TCG. Construis 2 decks compétitifs avec UNIQUEMENT les cartes listées.
+Règles : 60 cartes exactement, max 4 copies par carte non-énergie, énergies de base illimitées.
+Tous les Pokémon du deck DOIVENT être dans la liste. missingCards = Dresseurs/Objets seulement (pas de Pokémon).${preferredTypes.length ? `\nTypes imposés : ${preferredTypes.join(" + ")} uniquement.` : ""}
 
-CARTES POSSÉDÉES PAR LE JOUEUR (format: Nom ×quantité, séparés par virgule) :
-${cardList}
+Cartes (Nom ×qté) : ${cardList}
+Énergies : ${energyList || "toutes disponibles"}
 
-STOCK D'ÉNERGIES :
-${energyList || "Énergies de Base disponibles en quantité illimitée pour tous les types."}
-${typesLine}
-════════════════════════════════════════════
-LOI ABSOLUE — AUCUN POKÉMON DANS missingCards
-════════════════════════════════════════════
-⛔ SI LE POKÉMON PRINCIPAL N'EST PAS DANS LA LISTE CI-DESSUS → NE PAS CRÉER CE DECK.
-⛔ missingCards ne doit contenir QUE des cartes Dresseur (Objets, Supporters, Stades).
-⛔ AUCUN Pokémon dans missingCards — ni le principal, ni une évolution, ni un support.
-⛔ Si une évolution du Pokémon-star manque, ne crée pas ce deck.
-
-CONSÉQUENCE : si ton deck nécessite un Pokémon absent de la liste → supprime ce deck,
-propose-en un autre avec un Pokémon présent.
-
-RÈGLE DE STRUCTURE :
-• missingCards = uniquement : Poké Ball, Super Ball, Professeur, Marnie, Boss, Iono,
-  Objets de recherche, Énergies Spéciales. MAX 4 cartes manquantes par deck.
-• Tout Pokémon dans le deck DOIT avoir owned:true ET son cardId dans la liste.
-
-════════════════════════════════════════════
-RÈGLES OFFICIELLES TCG
-════════════════════════════════════════════
-• 60 cartes EXACTEMENT · Max 4 copies d'une même carte non-énergie
-• Énergies de Base : illimitées · Énergies Spéciales : max 4
-• Au moins 1 Pokémon de Base requis · 6 cartes Récompense
-
-STRUCTURE RECOMMANDÉE (60 cartes) :
-  • ~12 Pokémon : Pokémon-star ×3-4 + support ×2-3 + pré-évolutions si nécessaire
-  • ~28 Dresseurs : Supporters ×8-10 + Objets ×14-16 + Stades ×2-3
-  • ~10-14 Énergies de Base
-
-════════════════════════════════════════════
-MISSION : 2 DECKS COMPLETS, UNIQUEMENT AVEC LES CARTES POSSÉDÉES
-════════════════════════════════════════════
-• Varie les archétypes (aggro, contrôle, combo) et les Pokémon-star
-• Ordre : du plus jouable au moins jouable
-• Pour chaque deck : vérifie que sum(cards qty) + sum(energy qty) = 60
-
-JSON UNIQUEMENT (pas de texte avant/après) :
-{"decks":[{
-  "name":"Nom du deck",
-  "strategy":"Stratégie en 2-3 phrases",
-  "cards":[{"cardId":"id-exact","name":"Nom","qty":4,"owned":true,"isPokemon":true}],
-  "energy":[{"type":"Feu","qty":10}],
-  "missingCards":[{"name":"Poké Ball","setName":"Écarlate et Violet","qty":4,"reason":"Chercheur essentiel","isPokemon":false}]
-}]}`;
+JSON uniquement :
+{"decks":[{"name":"str","strategy":"str","cards":[{"name":"str","qty":1,"owned":true,"isPokemon":true}],"energy":[{"type":"str","qty":1}],"missingCards":[{"name":"str","qty":1,"reason":"str","isPokemon":false}]}]}`;
 
     const payload = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
@@ -98,10 +56,10 @@ JSON UNIQUEMENT (pas de texte avant/après) :
     let gemRes = null, lastErr = "";
     try {
       const endpoints = [
+        { m:"gemini-3.6-flash", v:"v1beta" },
+        { m:"gemini-3.8-flash", v:"v1beta" },
         { m:"gemini-3.1-flash-lite", v:"v1beta" },
         { m:"gemini-flash-latest", v:"v1beta" },
-        { m:"gemini-3.5-flash-lite", v:"v1beta" },
-        { m:"gemini-3.5-flash", v:"v1beta" },
       ];
       const races = endpoints.map(({m,v}) =>
         fetch(`https://generativelanguage.googleapis.com/${v}/models/${m}:generateContent?key=${key}`,
