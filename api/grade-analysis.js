@@ -39,7 +39,7 @@ Inclus seulement les cartes rentables à grader. Maximum 12 recommandations, ord
 
     const payload = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { response_mime_type: "application/json", temperature: 0.2 }
+      generationConfig: { responseMimeType: "application/json", temperature: 0.2 }
     });
 
     const ctrl = new AbortController();
@@ -47,10 +47,10 @@ Inclus seulement les cartes rentables à grader. Maximum 12 recommandations, ord
     let gemRes = null, lastErr = "";
     try {
       const endpoints = [
+        { m:"gemini-flash-latest", v:"v1beta" },
         { m:"gemini-2.5-flash", v:"v1beta" },
-        { m:"gemini-2.0-flash", v:"v1beta" },
-        { m:"gemini-1.5-flash", v:"v1" },
-        { m:"gemini-1.5-flash-8b", v:"v1" },
+        { m:"gemini-3.5-flash", v:"v1beta" },
+        { m:"gemini-flash-lite-latest", v:"v1beta" },
       ];
       const races = endpoints.map(({m,v}) =>
         fetch(
