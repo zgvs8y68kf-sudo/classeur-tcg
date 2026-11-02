@@ -2342,6 +2342,8 @@ async function scanPage(file) {
       const resolve = async det => {
         // Priorité au nom : matchCard cherche par nom et classe par numéro
         let cands = det.name ? await matchCard({...det, language: S.lang, variant: "normal"}) : [];
+        // Filtre par numéro si on l'a (garde que nom+numéro correspondants)
+        if (cands.length && det.number) { const nn=normNum(det.number); const f=cands.filter(c=>normNum(c.localId)===nn); if(f.length) cands=f; }
         // Fallback par numéro uniquement si la recherche par nom n'a rien donné
         if (!cands.length && det.number) cands = filterCandsByName(await lookupCard(det.number, det.total, det.setCode), det.name);
         return { det: {...det, language: S.lang, variant: "normal"}, cands, sel: 0, added: false };
@@ -2450,6 +2452,8 @@ async function scanFiles(files) {
       const det = { name, number, total, setCode, language: S.lang, variant: "normal" };
       // Priorité au nom : matchCard cherche par nom et classe par numéro
       let cands = name ? await matchCard(det) : [];
+      // Filtre par numéro si on l'a (garde que nom+numéro correspondants)
+      if (cands.length && number) { const nn=normNum(number); const f=cands.filter(c=>normNum(c.localId)===nn); if(f.length) cands=f; }
       // Fallback par numéro si la recherche par nom échoue
       if (!cands.length && number) cands = filterCandsByName(await lookupCard(number, total, setCode), name);
       entry.found = [{ det, cands, sel: 0, added: false }];
