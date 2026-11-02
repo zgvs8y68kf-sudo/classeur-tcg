@@ -1474,6 +1474,7 @@ async function openManualDeckBuilder() {
   document.body.appendChild(overlay);
   overlay.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px"><div class="spinner" style="width:32px;height:32px;border-width:3px"></div><p style="color:var(--muted);font-size:14px">Analyse de ta collection…</p></div>`;
 
+  // Phase 1 : métadonnées niveau set (format résumé — types parfois absents)
   if (!S._cardMeta) S._cardMeta = {};
   const ownedSetIds = [...new Set(Object.values(S.coll).filter(d=>qty(d)>0&&d.setId).map(d=>d.setId))];
   await Promise.allSettled(ownedSetIds.map(async sid => {
@@ -1484,10 +1485,38 @@ async function openManualDeckBuilder() {
     } catch {}
   }));
 
+  // Phase 2 : types manquants → cache localStorage + fetch individuel par carte
+  if (!S._cardTypes) { try { S._cardTypes=JSON.parse(localStorage.getItem('ctcg_card_types')||'{}'); } catch { S._cardTypes={}; } }
+  const needT = Object.values(S.coll).filter(d=>{
+    if(!qty(d)||!d.cardId)return false;
+    if(S._cardTypes[d.cardId])return false; // déjà en cache
+    const m=S._cardMeta?.[d.setId]?.[String(d.localId)];
+    return !m||!m.types?.length; // absents ou vides depuis le set
+  });
+  if(needT.length){
+    const CONC=15;
+    for(let i=0;i<needT.length;i+=CONC){
+      await Promise.allSettled(needT.slice(i,i+CONC).map(async d=>{
+        try{
+          const c=await j(`${API}/fr/cards/${d.cardId}`);
+          if(c) S._cardTypes[d.cardId]={types:c.types||[],stage:(c.stage||'').toLowerCase(),hp:parseInt(c.hp)||0,cat:c.category||'Pokémon'};
+        }catch{}
+      }));
+    }
+    try{localStorage.setItem('ctcg_card_types',JSON.stringify(S._cardTypes));}catch{}
+  }
+
   const TFR = {fire:'Feu',water:'Eau',grass:'Plante',lightning:'Foudre',psychic:'Psy',fighting:'Combat',darkness:'Obscurité',metal:'Métal',fairy:'Fée',dragon:'Dragon',colorless:'Incolore'};
   const SS = {vmax:0,vstar:0,ex:0,gx:1,v:2,'stage 2':3,'stage2':3,'stage 1':4,'stage1':4,basic:5,'':5};
   const SB = {vmax:{l:'VMAX',c:'#8b5cf6'},vstar:{l:'VSTAR',c:'#f59e0b'},ex:{l:'EX',c:'#ef4444'},gx:{l:'GX',c:'#3b82f6'},v:{l:'V',c:'#10b981'},'stage 2':{l:'S2',c:'#6366f1'},'stage2':{l:'S2',c:'#6366f1'},'stage 1':{l:'S1',c:'#94a3b8'},'stage1':{l:'S1',c:'#94a3b8'}};
-  function gm(card){return S._cardMeta?.[card.setId]?.[String(card.localId)]||null;}
+  function gm(card){
+    const m=S._cardMeta?.[card.setId]?.[String(card.localId)];
+    const t=S._cardTypes?.[card.cardId];
+    if(!m&&!t)return null;
+    if(!m)return t;
+    if(!t)return m;
+    return{cat:m.cat||t.cat,types:m.types?.length?m.types:t.types,stage:m.stage||t.stage,hp:m.hp||t.hp};
+  }
   function nT(t){return TFR[t.toLowerCase()]||t;}
   // Détecte le tier depuis le nom (VMAX/VSTAR/ex/GX/V sont "Basic" dans TCGdex)
   function stageOf(d){
@@ -1509,21 +1538,17 @@ async function openManualDeckBuilder() {
     return Object.values(S.coll).filter(d=>qty(d)>0&&d.setId&&d.localId)
       .map(d=>({...d,_q:qty(d),_m:gm(d)}))
       .filter(d=>{const c=(d._m?.cat||'').toLowerCase();return cat==='pokemon'?(c.includes('pok')||!c):(!c.includes('pok')&&!c.includes('nerg')&&!c.includes('ener')&&!!c);})
+      .filter(d=>{
+        if(cat!=='pokemon'||!mdb.types.length)return true;
+        const tt=(d._m?.types||[]).map(nT);
+        if(!tt.length)return true; // type inconnu → garder (ne pas cacher)
+        return mdb.types.some(t=>tt.includes(t));
+      })
       .sort((a,b)=>{
-        // Priorité 1 : type match (si types sélectionnés)
-        if(mdb.types.length&&cat==='pokemon'){
-          const ta=(a._m?.types||[]).map(nT),tb=(b._m?.types||[]).map(nT);
-          const ma=ta.length>0&&mdb.types.some(t=>ta.includes(t));
-          const mb=tb.length>0&&mdb.types.some(t=>tb.includes(t));
-          if(ma!==mb)return ma?-1:1;
-        }
-        // Priorité 2 : tier (VMAX/ex/GX > V > S2 > S1 > Basic)
         const sa=SS[stageOf(a)]??5,sb=SS[stageOf(b)]??5;
         if(sa!==sb)return sa-sb;
-        // Priorité 3 : PV desc
         const hd=(b._m?.hp||0)-(a._m?.hp||0);
         if(hd)return hd;
-        // Priorité 4 : prix desc
         return(b.prices?.normal||b.prices?.holo||0)-(a.prices?.normal||a.prices?.holo||0);
       });
   }
