@@ -2725,27 +2725,19 @@ async function imgFb(el) {
     return;
   }
 
-  // 4. pokemontcg.io URL directe (fonctionne si l'ID TCGdex == ID pokemontcg.io)
-  if (!s.includes("pokemontcg.io")) {
-    const n = String(parseInt(lid, 10) || lid);
-    el.onerror = () => imgFb(el); // si 404 → recherche API (étape 5)
-    el.src = `https://images.pokemontcg.io/${sid}/${n}.png`;
+  // 4. scrydex CDN — images.scrydex.com/pokemon/{setId}-{n}/image
+  const n = String(parseInt(lid, 10) || lid);
+  const scryId = `${sid}-${n}`;
+  if (!s.includes("scrydex.com")) {
+    el.onerror = () => imgFb(el);
+    el.src = `https://images.scrydex.com/pokemon/${scryId}/image`;
     return;
   }
-
-  // 5. pokemontcg.io recherche par nom+numéro — dernier recours quand l'ID diffère
-  //    Parfait pour les reprints (artwork identique à l'original)
-  const name = enC?.name || el.dataset.name || '';
-  if (!name) return;
-  const n = String(parseInt(lid, 10) || lid);
-  try {
-    const q = encodeURIComponent(`name:"${name}" number:${n}`);
-    const r = await fetch(`https://api.pokemontcg.io/v2/cards?q=${q}&select=images&pageSize=1`);
-    if (r.ok) {
-      const img = (await r.json()).data?.[0]?.images?.small;
-      if (img) { el.onerror = null; el.src = img; }
-    }
-  } catch {}
+  // 5. scrydex variante /small si /image 404
+  if (s.includes("/image") && s.includes("scrydex.com")) {
+    el.onerror = null;
+    el.src = s.replace("/image", "/small");
+  }
 }
 
 const _logoCache = {};
