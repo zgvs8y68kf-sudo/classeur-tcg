@@ -804,7 +804,7 @@ function cardSparkline(pts){
 }
 
 function itemRow(d, right){
-  return `<button class="item" data-open="${esc(d.cardId)}"><img src="${esc(d.image ? d.image + "/low.webp" : "")}" alt="" loading="lazy" onerror="imgFb(this)">
+  return `<button class="item" data-open="${esc(d.cardId)}"><img src="${imgSrc(d.image||'', d.localId)}" alt="" loading="lazy">
     <span class="t"><b>${esc(d.name)}</b><small>${esc(S.catalog?.sets?.[d.setId]?.name || d.setId)} · ${esc(d.localId)}${d.grade?.co ? " · " + (d.grade?.status==="pending" ? `⏳ En cours chez ${esc(d.grade.co)}${d.grade.sentAt?" (envoyée "+esc(new Date(d.grade.sentAt).toLocaleDateString("fr-FR"))+")" :""}` : esc(d.grade.co + " " + (d.grade.note||""))) : ""}</small></span>
     <span class="p">${right}</span></button>`;
 }
@@ -822,7 +822,7 @@ function viewHome(){
   const alertBanner = activeAlerts.length ? `<div class="alert-bar">
     <h4>📈 ${activeAlerts.length} carte${activeAlerts.length>1?"s":""} en hausse</h4>
     ${activeAlerts.slice(0,5).map(a => `<div class="alert-item">
-      ${a.image ? `<img src="${esc(a.image)}/low.webp" style="width:28px;height:39px;object-fit:cover;border-radius:3px" alt="">` : ""}
+      ${a.image ? `<img src="${imgSrc(a.image, a.localId||'')}" style="width:28px;height:39px;object-fit:cover;border-radius:3px" alt="">` : ""}
       <span>${esc(a.name)} <span class="muted" style="font-size:11px">${esc(a.date.slice(5))}</span></span>
       <span class="pct">+${a.pct}%</span>
       <span class="num" style="font-size:12px">${eur(a.oldPrice)} → ${eur(a.newPrice)}</span>
@@ -1015,7 +1015,7 @@ async function viewSet(app){
   ${cards.length ? `<div class="binder">${cards.map(c => {
     const d = S.coll[c.id], q = d ? qty(d) : 0;
     return `<button class="pocket ${q?"":"missing"}" data-open="${esc(c.id)}" aria-label="${esc(c.name)} n°${esc(c.localId)}${q?", "+q+" exemplaire(s)":", manquante"}">
-      <img src="${esc(c.image ? c.image+"/low.webp" : "/_")}" data-set="${esc(c.setId)}" data-local="${esc(c.localId)}" data-name="${esc(c.name)}" alt="" loading="lazy" onerror="imgFb(this)">
+      <img src="${imgSrc(c.image||'', c.localId)}" alt="" loading="lazy">
       <span class="no">${esc(c.localId)}</span>${q > 1 ? `<span class="qty">×${q}</span>` : ""}${d?.wish && !q ? `<span class="wish">♥</span>` : ""}${d?.grade?.co ? (d.grade?.status==="pending" ? `<span class="grd pend">⏳${esc(d.grade.co)}</span>` : `<span class="grd">${esc(d.grade.co)} ${esc(d.grade.note||"")}</span>`) : ""}
       <span class="pocket-add" data-quickadd="${esc(c.id)}" aria-label="Ajouter ${esc(c.name)}">+</span>
     </button>`; }).join("")}</div>` : `<div class="empty">Aucune carte pour ce filtre.</div>`}`;
@@ -1035,7 +1035,7 @@ function viewScan(){
         ${f.added ? `<span class="up" style="font-weight:700">Ajoutée ✓</span>` : ""}
         <button data-removescan="${i}:${k}" title="Retirer cette carte" style="background:#ef444422;border:1px solid #ef4444;color:#ef4444;border-radius:6px;cursor:pointer;font-size:14px;padding:3px 8px;line-height:1;font-weight:700" aria-label="Supprimer">✕</button>
       </div></div>
-      ${f.cands.length ? `<div class="cand">${f.cands.slice(0,12).map((c,ci) => `<button data-pick="${i}:${k}:${ci}" aria-pressed="${f.sel===ci}"><img src="${esc(c.image ? c.image+"/low.webp" : "/_")}" data-set="${esc(c.setId)}" data-local="${esc(c.localId)}" alt="" loading="lazy" onerror="imgFb(this)"><small>${esc(S.catalog?.sets?.[c.setId]?.name || c.setId)}</small></button>`).join("")}</div>
+      ${f.cands.length ? `<div class="cand">${f.cands.slice(0,12).map((c,ci) => `<button data-pick="${i}:${k}:${ci}" aria-pressed="${f.sel===ci}"><img src="${imgSrc(c.image||'', c.localId)}" alt="" loading="lazy"><small>${esc(S.catalog?.sets?.[c.setId]?.name || c.setId)}</small></button>`).join("")}</div>
       <div class="row"><select id="var-${i}-${k}" class="chip" aria-label="Variante">${VARIANTS.map(([v,l]) => `<option value="${v}" ${f.det.variant===v?"selected":""}>${l}</option>`).join("")}</select>
       <button class="btn primary" data-addscan="${i}:${k}">${f.added ? "Ajouter un exemplaire de plus" : "Ajouter au classeur"}</button></div>`
       : `<p class="muted" style="margin:6px 0">Pas trouvée automatiquement${f.det.number ? ` (${esc(f.det.number)}${f.det.total?"/"+esc(f.det.total):""} ${esc(f.det.setCode||"")})` : ""}. <button class="btn" data-act="tosearch" data-q="${esc(f.det.name||f.det.number||"")}">Chercher</button></p>`}
@@ -1082,7 +1082,7 @@ async function doSearch(q){
     if (numP?.total) list = list.filter(c => { const s = S.catalog?.sets?.[c.setId]; return s && (s.official === numP.total || s.total === numP.total); });
     box.innerHTML = list.length ? `<div class="binder">${list.slice(0, 120).map(c => { const d = S.coll[c.id], qn = d ? qty(d) : 0;
       const cinfo = esc(JSON.stringify({name:c.name,setId:c.setId,localId:c.localId,image:c.image||""}));
-      return `<button class="pocket ${qn?"":"missing"}" data-open="${esc(c.id)}" aria-label="${esc(c.name)}">${c.image ? `<img src="${esc(c.image)}/low.webp" alt="" loading="lazy">` : `<span class="noimg">${esc(c.name)}</span>`}
+      return `<button class="pocket ${qn?"":"missing"}" data-open="${esc(c.id)}" aria-label="${esc(c.name)}"><img src="${imgSrc(c.image||'', c.localId)}" alt="" loading="lazy">
       <span class="no">${esc(S.catalog?.sets?.[c.setId]?.name?.slice(0,14) || c.setId)} ${esc(c.localId)}</span>${qn>1?`<span class="qty">×${qn}</span>`:""}
       <span class="pocket-add" data-quickadd="${esc(c.id)}" data-qacinfo="${cinfo}" aria-label="Ajouter ${esc(c.name)}">+</span></button>`; }).join("")}</div>
       <p class="muted" style="font-size:12px">${list.length} résultat(s)${isNum ? ` pour le n° ${esc(q.trim())}` : ""}. Les cartes en gris ne sont pas dans ta collection.</p>` : `<div class="empty">Aucune carte ${isNum ? `n° ${esc(q.trim())}` : `« ${esc(q)} »`}.</div>`;
@@ -1099,7 +1099,7 @@ function _aiSection(title, icon, content){
 function _aiItemList(items, cols){
   if (!items.length) return `<div class="empty" style="font-size:13px">Aucune recommandation.</div>`;
   return `<div class="list">${items.map(x => `<button class="item"${x.cardId ? ` data-open="${esc(x.cardId)}"` : ""}>
-    ${x.image ? `<img src="${esc(x.image)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">` : `<span style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:inline-block"></span>`}
+    <img src="${imgSrc(x.image||'', x.localId||'')}" alt="" loading="lazy">
     <span class="t"><b>${esc(x.name)}</b>
       <small style="color:${(cols||{})[x.priority]||"var(--muted)"}">${x.priority==="haute"?"⭐ Priorité haute":x.priority==="moyenne"?"👍 Priorité moyenne":"➖ Priorité faible"}${x.badge?" · "+esc(x.badge):""}</small>
       <small class="muted" style="display:block;margin-top:2px">${esc(x.reason||"")}</small>
@@ -1221,7 +1221,7 @@ function openPokePicker(pIdx, slot){
       <input id="pp-q" type="search" placeholder="Rechercher…" style="width:100%;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:9px;padding:8px 12px;font-size:15px;margin-bottom:10px">
       <div class="picker-list" id="pp-list">
         ${cards.map(c=>`<button class="item" data-pc="${esc(c.cardId)}|${esc(c.name)}|${esc(c.image||'')}">
-          ${c.image?`<img src="${esc(c.image)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">`:`<span style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:inline-block"></span>`}
+          <img src="${imgSrc(c.image||'', c.localId)}" alt="" loading="lazy">
           <span class="t"><b>${esc(c.name)}</b>${sel?.cardId===c.cardId?` <span style="color:var(--accent)">✓</span>`:''}
           </span>
         </button>`).join("")}
@@ -1379,7 +1379,7 @@ function addCardFromCollection(edDeck, onAdd){
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;max-height:360px;overflow-y:auto">
         ${f.slice(0,60).map(c=>`<button data-ac="${esc(c.cardId)}" style="background:none;border:1px solid var(--line);border-radius:8px;padding:7px 10px;display:flex;align-items:center;gap:8px;cursor:pointer;text-align:left;color:var(--fg);width:100%">
-          ${c.image?`<img src="${esc(c.image)}/low.webp" style="width:30px;height:40px;object-fit:contain;border-radius:4px" loading="lazy">`:`<div style="width:30px;height:40px;background:var(--sunk);border-radius:4px;flex:none"></div>`}
+          <img src="${imgSrc(c.image||'', c.localId)}" style="width:30px;height:40px;object-fit:contain;border-radius:4px" loading="lazy">
           <span style="font-size:13px;flex:1;text-align:left">${esc(c.name)}</span>
           <span style="font-size:11px;color:var(--muted)">${esc(c.setId||"")}</span>
         </button>`).join("")}
@@ -1416,7 +1416,7 @@ function openDeckEditor(deckId){
     const t = total();
     const sh = scrim.querySelector(".sheet");
     const rowHtml = (c, ci) => `<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--line)">
-      ${c.image?`<img src="${esc(c.image)}/low.webp" style="width:28px;height:38px;object-fit:contain;border-radius:3px;flex:none" loading="lazy">`:`<div style="width:28px;height:38px;background:var(--sunk);border-radius:3px;flex:none"></div>`}
+      <img src="${imgSrc(c.image||'', c.localId)}" style="width:28px;height:38px;object-fit:contain;border-radius:3px;flex:none" loading="lazy">
       <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span>
       <button data-de="dec" data-ci="${ci}" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">−</button>
       <span style="min-width:20px;text-align:center;font-size:13px;font-weight:700">${c.qty}</span>
@@ -1684,7 +1684,7 @@ async function openManualDeckBuilder() {
       ${cc.slice(0,60).map(card=>{
         const id=mdb.cards[card.cardId]?.qty||0,mx=Math.min(4,card._q),ca=id<mx&&rem>0,b=SB[stageOf(card)],pr=card.prices?.normal||card.prices?.holo||card.prices?.reverse||0;
         return`<div data-cr="${esc(card.cardId)}" style="border-radius:14px;overflow:hidden;background:var(--surface);border:2.5px solid ${id>0?'var(--accent)':'var(--line)'};position:relative;transition:border-color .15s">
-          ${card.image?`<div style="background:var(--sunk);aspect-ratio:2.5/3.5;overflow:hidden"><img src="${card.image}/low.webp" data-set="${esc(card.setId)}" data-local="${esc(card.localId)}" data-name="${esc(card.name)}" style="width:100%;height:100%;object-fit:contain" loading="lazy" onerror="imgFb(this)"></div>`:`<div style="aspect-ratio:2.5/3.5;background:var(--sunk);display:flex;align-items:center;justify-content:center;font-size:32px">${cat==='pokemon'?'🐲':'📋'}</div>`}
+          <div style="background:var(--sunk);aspect-ratio:2.5/3.5;overflow:hidden"><img src="${imgSrc(card.image||'', card.localId)}" style="width:100%;height:100%;object-fit:contain" loading="lazy"></div>
           ${b?`<span style="position:absolute;top:6px;left:6px;font-size:9px;padding:2px 6px;border-radius:5px;background:${b.c};color:#fff;font-weight:800">${b.l}</span>`:''}
           ${id>0?`<span data-dk style="position:absolute;top:6px;right:6px;background:var(--accent);color:#fff;border-radius:14px;padding:1px 8px;font-size:12px;font-weight:800">×${id}</span>`:''}
           <div style="padding:7px">
@@ -1979,7 +1979,7 @@ function renderPlayerArea(p, pIdx){
         const ko = p.active.hp === 0;
         return `<div class="bat-active${ko?' ko':''}">
           <div class="bat-head">
-            ${p.active.image?`<img class="bat-img" src="${esc(p.active.image)}/low.webp" alt="" onerror="imgFb(this)">`:`<div class="bat-img" style="display:flex;align-items:center;justify-content:center;font-size:24px">🎴</div>`}
+            <img class="bat-img" src="${imgSrc(p.active.image||'', p.active.localId||'')}" alt="">
             <div class="bat-nm">
               <b>${esc(p.active.name)}</b>
               <small>${p.active.hp}/${p.active.maxHp} PV${ko?' · 💀 KO':''}</small>
@@ -2017,7 +2017,7 @@ function renderPlayerArea(p, pIdx){
     if (!b) return `<div class="bench-tile" data-act="openpoke" data-pidx="${pIdx}" data-slot="${i}" title="Banc ${i+1}">＋</div>`;
     const bp = b.hp/b.maxHp;
     return `<div class="bench-tile" data-act="openpoke" data-pidx="${pIdx}" data-slot="${i}" title="${b.name}">
-      ${b.image?`<img src="${esc(b.image)}/low.webp" alt="" onerror="imgFb(this)">`:`<span style="font-size:11px;text-align:center;padding:2px;color:var(--fg)">${esc(b.name.split(" ")[0])}</span>`}
+      <img src="${imgSrc(b.image||'', b.localId||'')}" alt="">
       <div class="bhp"><div class="bhp-fill" style="width:${Math.round(bp*100)}%;background:${hpColor(bp)}"></div></div>
     </div>`;
   }).join("");
@@ -2063,7 +2063,7 @@ function viewLists(){
     ? `<div class="list">${active.slice(0,8).map(a => {
         const d = S.coll[a.cardId]; const img = d?.image||"";
         return `<button class="item" data-open="${esc(a.cardId)}">
-          ${img ? `<img src="${esc(img)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">` : `<span style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:inline-block"></span>`}
+          <img src="${imgSrc(img||'', a.localId||'')}" alt="" loading="lazy">
           <span class="t"><b>${esc(a.name)}</b>
             <small style="color:#22c55e">+${Math.round((a.pct||0)*100)} % · ${eur(a.oldPrice)} → ${eur(a.newPrice)}</small>
             <small class="muted">${esc(new Date(a.date).toLocaleDateString("fr-FR"))}</small>
@@ -2125,7 +2125,7 @@ function viewLists(){
   const pending = Object.values(S.coll).filter(d => d.grade?.status === "pending" && d.grade?.co);
   const atGraderHtml = pending.length
     ? `<div class="list">${pending.map(d => `<button class="item" data-open="${esc(d.cardId)}">
-        ${d.image ? `<img src="${esc(d.image)}/low.webp" alt="" loading="lazy" onerror="imgFb(this)">` : `<span style="width:44px;height:61px;background:var(--sunk);border-radius:4px;flex:none;display:inline-block"></span>`}
+        <img src="${imgSrc(d.image||'', d.localId||'')}" alt="" loading="lazy">
         <span class="t"><b>${esc(d.name)}</b>
           <small style="color:#f59e0b">⏳ En cours chez ${esc(d.grade.co)}</small>
           ${d.grade.sentAt ? `<small class="muted">Envoyée le ${new Date(d.grade.sentAt).toLocaleDateString("fr-FR")}</small>` : ""}
@@ -2328,7 +2328,7 @@ async function openCard(id, deck=[], dir=null){
     $(".sheet", scrim).innerHTML = `<div class="grab"></div>
     <div class="sheet-header"><button class="sheet-close" id="closebtn" aria-label="Fermer">✕</button></div>
     <div class="detail">
-      <img class="big" src="${esc(c.image ? c.image + "/high.webp" : "/_")}" data-set="${esc(c.setId||doc.setId)}" data-local="${esc(c.localId||doc.localId)}" alt="${esc(c.name)}" onerror="imgFb(this)">
+      <img class="big" src="${imgSrc(c.image||'', c.localId||doc.localId, true)}" alt="${esc(c.name)}">
       <div style="min-width:0">
         <div class="row" style="justify-content:space-between;align-items:flex-start"><h3>${esc(c.name)}</h3>
           <button class="iconbtn" id="wishbtn" aria-pressed="${!!doc.wish}" title="Liste de souhaits" style="color:${doc.wish?"var(--accent)":"inherit"}">${doc.wish?"♥":"♡"}</button></div>
@@ -2687,24 +2687,13 @@ async function compressImg(file, maxPx, q) {
 const compressForGemini = f => compressImg(f, 1280, 0.90);
 const compressForPage   = f => compressImg(f, 2000, 0.88); // plus haute résolution pour 9 cartes
 
-/* Fallback image : TCGdex FR → CDN officiel Pokémon TCG FR → EN */
-function imgFb(el) {
-  el.onerror = null;
-  const s = el.src || "";
-  const sid = el.dataset.set, lid = el.dataset.local;
-  if (!sid || !lid) return;
-  const n = String(parseInt(lid, 10) || lid);
-  const setName = (S?.catalog?.sets?.[sid]?.name || '').toLowerCase();
-  const isClassic30 = setName.includes('classic') && (setName.includes('30') || setName.includes('anniversaire') || setName.includes('anniversary'));
-  if (isClassic30 && !s.includes("cloudfront.net")) {
-    el.onerror = () => imgFb(el);
-    el.src = `https://dz3we2x72f7ol.cloudfront.net/expansions/30th-celebration/fr-fr/2M6P_Classic_FR_${n}-2x.png`;
-    return;
-  }
-  if (isClassic30 && s.includes("cloudfront.net") && s.includes("/fr-fr/")) {
-    el.onerror = null;
-    el.src = s.replace("/fr-fr/", "/en-us/").replace("_FR_", "_EN_");
-  }
+/* Proxy image via /api/img — fallbacks gérés côté serveur avec cache 1 an */
+function imgSrc(base, lid, hi) {
+  const n = lid ? String(parseInt(lid, 10) || lid) : '';
+  let p = 'lid=' + encodeURIComponent(n);
+  if (base) p += '&base=' + encodeURIComponent(base);
+  if (hi) p += '&hi=1';
+  return '/api/img?' + p;
 }
 
 const _logoCache = {};
@@ -3230,7 +3219,7 @@ async function vscanSearch(q, codeHint = ""){
     let t = 3;
     const renderPicker = () => {
       if (!resDiv.isConnected) return;
-      resDiv.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Quelle édition ? <span id="vscan-cd" style="font-weight:700;color:var(--accent)">${t}s</span> → ajout auto</div><div class="vscard-grid">${cands.slice(0,8).map((c,i)=>`<button class="vscard" data-vscard="${i}" aria-pressed="${i===0}">${c.image?`<img src="${esc(c.image)}/low.webp" alt="" loading="lazy">`:`<span style="font-size:9px;padding:3px;text-align:center;word-break:break-word;color:var(--muted)">${esc(c.name)}</span>`}<small>${esc(sn(c.setId))} ${esc(c.localId)}</small></button>`).join("")}</div>`;
+      resDiv.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Quelle édition ? <span id="vscan-cd" style="font-weight:700;color:var(--accent)">${t}s</span> → ajout auto</div><div class="vscard-grid">${cands.slice(0,8).map((c,i)=>`<button class="vscard" data-vscard="${i}" aria-pressed="${i===0}"><img src="${imgSrc(c.image||'', c.localId)}" alt="" loading="lazy"><small>${esc(sn(c.setId))} ${esc(c.localId)}</small></button>`).join("")}</div>`;
     };
     renderPicker();
     window._vsAutoAdd = setInterval(() => {
@@ -3256,7 +3245,7 @@ function _vscanDoAdd(c, resDiv) {
   VS.currentCands=null; VS.currentSel=0; VS.currentVariant="normal"; VS.buffer=[];
   document.getElementById("vscan-vars")?.querySelectorAll("[data-vsvar]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.vsvar==="normal"));
   const inp=document.getElementById("vscan-q"); if(inp) inp.value="";
-  if (resDiv?.isConnected) resDiv.innerHTML=`<div class="vscan-found">${c.image?`<img src="${esc(c.image)}/low.webp" alt="">`:`<div style="width:56px;height:78px;border-radius:7px;background:var(--sunk);flex-shrink:0"></div>`}<div><div style="font-size:14px;font-weight:700">✅ ${esc(c.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(S.catalog?.sets?.[c.setId]?.name?.slice(0,18)||c.setId)} · #${esc(c.localId)}</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Pointe la carte suivante.</div></div></div>`;
+  if (resDiv?.isConnected) resDiv.innerHTML=`<div class="vscan-found"><img src="${imgSrc(c.image||'', c.localId)}" alt=""><div><div style="font-size:14px;font-weight:700">✅ ${esc(c.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(S.catalog?.sets?.[c.setId]?.name?.slice(0,18)||c.setId)} · #${esc(c.localId)}</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Pointe la carte suivante.</div></div></div>`;
   vscanBadge("✓ " + c.name.slice(0,20));
   setTimeout(()=>vscanBadge("Pointe le bas de la carte"),2500);
 }
