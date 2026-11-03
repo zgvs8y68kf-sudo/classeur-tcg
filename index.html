@@ -1015,7 +1015,7 @@ async function viewSet(app){
   ${cards.length ? `<div class="binder">${cards.map(c => {
     const d = S.coll[c.id], q = d ? qty(d) : 0;
     return `<button class="pocket ${q?"":"missing"}" data-open="${esc(c.id)}" aria-label="${esc(c.name)} n°${esc(c.localId)}${q?", "+q+" exemplaire(s)":", manquante"}">
-      <img src="${imgSrc(c.image||'', c.localId, false, c.setId)}" alt="" loading="lazy">
+      <img src="${imgSrc(c.image||'', c.localId, false, id)}" alt="" loading="lazy">
       <span class="no">${esc(c.localId)}</span>${q > 1 ? `<span class="qty">×${q}</span>` : ""}${d?.wish && !q ? `<span class="wish">♥</span>` : ""}${d?.grade?.co ? (d.grade?.status==="pending" ? `<span class="grd pend">⏳${esc(d.grade.co)}</span>` : `<span class="grd">${esc(d.grade.co)} ${esc(d.grade.note||"")}</span>`) : ""}
       <span class="pocket-add" data-quickadd="${esc(c.id)}" aria-label="Ajouter ${esc(c.name)}">+</span>
     </button>`; }).join("")}</div>` : `<div class="empty">Aucune carte pour ce filtre.</div>`}`;
