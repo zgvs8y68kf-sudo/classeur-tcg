@@ -8,10 +8,13 @@ export default async function handler(req) {
   const sid  = searchParams.get('sid')  || '';
 
   const tryFetch = async (src) => {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 5000);
     try {
-      const r = await fetch(src, { signal: AbortSignal.timeout(5000) });
+      const r = await fetch(src, { signal: ctrl.signal });
       if (r.ok) return r;
     } catch {}
+    finally { clearTimeout(tid); }
     return null;
   };
 
