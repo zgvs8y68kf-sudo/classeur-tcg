@@ -1,0 +1,45 @@
+export const config = { runtime: 'edge' };
+
+// Proxy logo d'extension : TCGdex FR → EN → pokemontcg.io
+// Cache 1 an sur l'edge Vercel.
+export default async function handler(req) {
+  const { searchParams } = new URL(req.url);
+  const base = searchParams.get('base') || '';
+  const sid  = searchParams.get('sid')  || '';
+
+  const tryFetch = async (src) => {
+    try {
+      const r = await fetch(src, { signal: AbortSignal.timeout(5000) });
+      if (r.ok) return r;
+    } catch {}
+    return null;
+  };
+
+  const urls = [];
+
+  if (base) {
+    const en = base.replace('/fr/', '/en/');
+    urls.push(base + '.webp', base + '.png');
+    if (en !== base) urls.push(en + '.webp', en + '.png');
+  }
+
+  if (sid) {
+    urls.push(`https://images.pokemontcg.io/${sid}/logo.png`);
+  }
+
+  for (const url of urls) {
+    const r = await tryFetch(url);
+    if (r) {
+      const ct = r.headers.get('content-type') || 'image/png';
+      const buf = await r.arrayBuffer();
+      return new Response(buf, {
+        headers: {
+          'Content-Type': ct,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      });
+    }
+  }
+
+  return new Response(null, { status: 404 });
+}

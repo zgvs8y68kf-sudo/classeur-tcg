@@ -887,7 +887,7 @@ function viewSeries(){
 }
 function setTile(x){
   const own = ownedInSet(x.id), tot = x.official || x.total || 0, pct = tot ? Math.min(100, own/tot*100) : 0;
-  const _lsrc = x.logo ? `${esc(x.logo)}.webp` : `/_`;
+  const _lsrc = `/api/logo?sid=${encodeURIComponent(x.id)}${x.logo ? '&base=' + encodeURIComponent(x.logo) : ''}`;
   // Gradient unique dérivé du hash de l'ID
   let h = 0; for (let i = 0; i < x.id.length; i++) h = (h * 31 + x.id.charCodeAt(i)) & 0xffffffff;
   const hu = (Math.abs(h) % 300 + 180) % 360, hu2 = (hu + 45) % 360;
@@ -2696,55 +2696,22 @@ function imgSrc(base, lid, hi) {
   return '/api/img?' + p;
 }
 
-const _logoCache = {};
-async function logoFb(el) {
+// Fallback logo : proxy /api/logo a échoué → essaie le symbole TCGdex puis texte
+function logoFb(el) {
   el.onerror = null;
   const s = el.src || "";
-  // 1. logo FR → logo EN
-  if (s.includes("/fr/")) {
-    el.onerror = () => logoFb(el);
-    el.src = s.replace("/fr/", "/en/");
-    return;
-  }
-  // 2. pokemontcg.io en priorité (couvre la plupart des sets avec un vrai logo)
-  const sid = el.dataset.setid;
-  if (sid && !el._ptcg) {
-    el._ptcg = true;
-    el.onerror = () => logoFb(el);
-    el.src = `https://images.pokemontcg.io/${sid}/logo.png`;
-    return;
-  }
-  // 3. → symbole de l'extension
-  if (!el._sym && el.dataset.symbol) {
+  if (el.dataset.symbol && !el._sym) {
     el._sym = true;
     el.onerror = () => logoFb(el);
     el.src = el.dataset.symbol + ".webp";
     return;
   }
-  // 4. symbole FR → symbole EN
-  if (el._sym && !el._symEn && s.includes("/fr/")) {
+  if (el._sym && s.includes("/fr/") && !el._symEn) {
     el._symEn = true;
-    el.onerror = () => logoFb(el);
+    el.onerror = null;
     el.src = s.replace("/fr/", "/en/");
     return;
   }
-  // 5. première carte du set comme vignette (toujours disponible)
-  if (sid && !el._card) {
-    el._card = true;
-    if (!_logoCache[sid]) {
-      try {
-        const r = await fetch(`https://api.tcgdex.net/v2/en/sets/${sid}`);
-        _logoCache[sid] = r.ok ? ((await r.json()).cards?.[0]?.image || null) : null;
-      } catch { _logoCache[sid] = null; }
-    }
-    if (_logoCache[sid]) {
-      el.onerror = () => { el.onerror = null; el.replaceWith(Object.assign(document.createElement("span"), {textContent: el.alt})); };
-      el.style.opacity = "0.65";
-      el.src = _logoCache[sid] + "/low.webp";
-      return;
-    }
-  }
-  // 6. texte en dernier recours
   el.replaceWith(Object.assign(document.createElement("span"), {textContent: el.alt}));
 }
 
