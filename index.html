@@ -2725,16 +2725,20 @@ async function imgFb(el) {
     return;
   }
 
-  // 4. scrydex CDN — images.scrydex.com/pokemon/{setId}-{n}/image
+  // 4. scrydex CDN — images.scrydex.com/pokemon/{scryId}/image
+  //    Certains sets ont un ID différent dans TCGdex vs scrydex → mapping par nom
   const n = String(parseInt(lid, 10) || lid);
-  const scryId = `${sid}-${n}`;
+  const setName = (S?.catalog?.sets?.[sid]?.name || '').toLowerCase();
+  const scrydexSid = (setName.includes('classic') && (setName.includes('30') || setName.includes('anniversaire') || setName.includes('anniversary')))
+    ? 'me55c' : sid;
+  const scryId = `${scrydexSid}-${n}`;
   if (!s.includes("scrydex.com")) {
     el.onerror = () => imgFb(el);
     el.src = `https://images.scrydex.com/pokemon/${scryId}/image`;
     return;
   }
-  // 5. scrydex variante /small si /image 404
-  if (s.includes("/image") && s.includes("scrydex.com")) {
+  // 5. /image 404 → tente /small
+  if (s.includes("scrydex.com") && s.endsWith("/image")) {
     el.onerror = null;
     el.src = s.replace("/image", "/small");
   }
