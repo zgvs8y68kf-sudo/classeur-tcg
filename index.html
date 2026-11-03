@@ -2695,7 +2695,7 @@ function imgSrc(base, lid, hi, setId) {
   if (hi) p += '&hi=1';
   if (setId) {
     const nm = (S?.catalog?.sets?.[setId]?.name || '').toLowerCase();
-    if (nm.includes('classic') && (nm.includes('30') || nm.includes('anniversaire') || nm.includes('anniversary'))) p += '&c=1';
+    if ((nm.includes('classic') || nm.includes('classique')) && (nm.includes('30') || nm.includes('anniversaire') || nm.includes('anniversary'))) p += '&c=1';
   }
   return '/api/img?' + p;
 }
