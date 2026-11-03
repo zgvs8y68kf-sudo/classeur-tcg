@@ -1675,7 +1675,7 @@ async function openManualDeckBuilder() {
   function sCards(cat){
     let cc=cards(cat);
     if(mdb.search){const q=mdb.search.toLowerCase();cc=cc.filter(c=>c.name.toLowerCase().includes(q));}
-    const{pokemon,trainer}=dc();
+    const{total,pokemon,trainer}=dc(),rem=60-total;
     const cnt=cat==='pokemon'?pokemon:trainer;
     return `<div id="mdb-cat-cnt" data-cat="${cat}" style="background:var(--sunk);border-radius:14px;padding:12px 14px;margin-bottom:12px">${catCntHtml(cnt,cat)}</div>
     <input id="mdb-s" placeholder="Rechercher…" value="${esc(mdb.search)}" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);font-size:14px;margin-bottom:12px">
