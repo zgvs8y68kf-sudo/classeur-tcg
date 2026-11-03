@@ -2740,7 +2740,7 @@ async function imgFb(el) {
   // 5. /image 404 → tente /small
   if (s.includes("scrydex.com") && s.endsWith("/image")) {
     el.onerror = null;
-    el.src = s.replace("/image", "/small");
+    el.src = s.replace(/\/image$/, "/small");
   }
 }
 
