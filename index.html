@@ -1015,7 +1015,7 @@ async function viewSet(app){
   ${cards.length ? `<div class="binder">${cards.map(c => {
     const d = S.coll[c.id], q = d ? qty(d) : 0;
     return `<button class="pocket ${q?"":"missing"}" data-open="${esc(c.id)}" aria-label="${esc(c.name)} n°${esc(c.localId)}${q?", "+q+" exemplaire(s)":", manquante"}">
-      <img src="${esc(c.image ? c.image+"/low.webp" : "/_")}" data-set="${esc(c.setId)}" data-local="${esc(c.localId)}" alt="" loading="lazy" onerror="imgFb(this)">
+      <img src="${esc(c.image ? c.image+"/low.webp" : "/_")}" data-set="${esc(c.setId)}" data-local="${esc(c.localId)}" data-name="${esc(c.name)}" alt="" loading="lazy" onerror="imgFb(this)">
       <span class="no">${esc(c.localId)}</span>${q > 1 ? `<span class="qty">×${q}</span>` : ""}${d?.wish && !q ? `<span class="wish">♥</span>` : ""}${d?.grade?.co ? (d.grade?.status==="pending" ? `<span class="grd pend">⏳${esc(d.grade.co)}</span>` : `<span class="grd">${esc(d.grade.co)} ${esc(d.grade.note||"")}</span>`) : ""}
       <span class="pocket-add" data-quickadd="${esc(c.id)}" aria-label="Ajouter ${esc(c.name)}">+</span>
     </button>`; }).join("")}</div>` : `<div class="empty">Aucune carte pour ce filtre.</div>`}`;
@@ -1684,7 +1684,7 @@ async function openManualDeckBuilder() {
       ${cc.slice(0,60).map(card=>{
         const id=mdb.cards[card.cardId]?.qty||0,mx=Math.min(4,card._q),ca=id<mx&&rem>0,b=SB[stageOf(card)],pr=card.prices?.normal||card.prices?.holo||card.prices?.reverse||0;
         return`<div data-cr="${esc(card.cardId)}" style="border-radius:14px;overflow:hidden;background:var(--surface);border:2.5px solid ${id>0?'var(--accent)':'var(--line)'};position:relative;transition:border-color .15s">
-          ${card.image?`<div style="background:var(--sunk);aspect-ratio:2.5/3.5;overflow:hidden"><img src="${card.image}/low.webp" data-set="${esc(card.setId)}" data-local="${esc(card.localId)}" style="width:100%;height:100%;object-fit:contain" loading="lazy" onerror="imgFb(this)"></div>`:`<div style="aspect-ratio:2.5/3.5;background:var(--sunk);display:flex;align-items:center;justify-content:center;font-size:32px">${cat==='pokemon'?'🐲':'📋'}</div>`}
+          ${card.image?`<div style="background:var(--sunk);aspect-ratio:2.5/3.5;overflow:hidden"><img src="${card.image}/low.webp" data-set="${esc(card.setId)}" data-local="${esc(card.localId)}" data-name="${esc(card.name)}" style="width:100%;height:100%;object-fit:contain" loading="lazy" onerror="imgFb(this)"></div>`:`<div style="aspect-ratio:2.5/3.5;background:var(--sunk);display:flex;align-items:center;justify-content:center;font-size:32px">${cat==='pokemon'?'🐲':'📋'}</div>`}
           ${b?`<span style="position:absolute;top:6px;left:6px;font-size:9px;padding:2px 6px;border-radius:5px;background:${b.c};color:#fff;font-weight:800">${b.l}</span>`:''}
           ${id>0?`<span data-dk style="position:absolute;top:6px;right:6px;background:var(--accent);color:#fff;border-radius:14px;padding:1px 8px;font-size:12px;font-weight:800">×${id}</span>`:''}
           <div style="padding:7px">
@@ -2687,7 +2687,7 @@ async function compressImg(file, maxPx, q) {
 const compressForGemini = f => compressImg(f, 1280, 0.90);
 const compressForPage   = f => compressImg(f, 2000, 0.88); // plus haute résolution pour 9 cartes
 
-/* Fallback image : FR→EN → .webp→.png → TCGdex EN API → pokemontcg.io */
+/* Fallback image : FR→EN → .webp→.png → TCGdex EN API → pokemontcg.io direct → pokemontcg.io search */
 const _enImgCache = {};
 async function imgFb(el) {
   el.onerror = null;
@@ -2700,7 +2700,7 @@ async function imgFb(el) {
     return;
   }
 
-  // 2. TCGdex .webp → .png (pas pour pokemontcg.io qui sert déjà du png)
+  // 2. TCGdex .webp → .png
   if (!s.includes("pokemontcg.io")) {
     if (s.endsWith("/low.webp"))  { el.onerror = () => imgFb(el); el.src = s.replace("/low.webp",  "/low.png");  return; }
     if (s.endsWith("/high.webp")) { el.onerror = () => imgFb(el); el.src = s.replace("/high.webp", "/high.png"); return; }
@@ -2710,25 +2710,42 @@ async function imgFb(el) {
   if (!sid || !lid) return;
   const key = `${sid}-${lid}`;
 
-  // 3. TCGdex EN API (si on n'a pas déjà une URL EN active)
+  // 3. TCGdex EN API — cache {img, name} pour l'étape 5
   if (!(key in _enImgCache)) {
     try {
       const r = await fetch(`https://api.tcgdex.net/v2/en/cards/${key}`);
-      _enImgCache[key] = r.ok ? ((await r.json()).image || null) : null;
+      if (r.ok) { const c = await r.json(); _enImgCache[key] = {img: c.image||null, name: c.name||''}; }
+      else _enImgCache[key] = null;
     } catch { _enImgCache[key] = null; }
   }
-  if (_enImgCache[key] && !s.startsWith(_enImgCache[key])) {
+  const enC = _enImgCache[key];
+  if (enC?.img && !s.startsWith(enC.img)) {
     el.onerror = () => imgFb(el);
-    el.src = _enImgCache[key] + "/low.webp";
+    el.src = enC.img + "/low.webp";
     return;
   }
 
-  // 4. pokemontcg.io — CDN alternatif, souvent plus rapide sur les nouveaux sets
+  // 4. pokemontcg.io URL directe (fonctionne si l'ID TCGdex == ID pokemontcg.io)
   if (!s.includes("pokemontcg.io")) {
-    const n = String(parseInt(lid, 10) || lid); // retire les zéros de tête
-    el.onerror = null; // fin de chaîne
+    const n = String(parseInt(lid, 10) || lid);
+    el.onerror = () => imgFb(el); // si 404 → recherche API (étape 5)
     el.src = `https://images.pokemontcg.io/${sid}/${n}.png`;
+    return;
   }
+
+  // 5. pokemontcg.io recherche par nom+numéro — dernier recours quand l'ID diffère
+  //    Parfait pour les reprints (artwork identique à l'original)
+  const name = enC?.name || el.dataset.name || '';
+  if (!name) return;
+  const n = String(parseInt(lid, 10) || lid);
+  try {
+    const q = encodeURIComponent(`name:"${name}" number:${n}`);
+    const r = await fetch(`https://api.pokemontcg.io/v2/cards?q=${q}&select=images&pageSize=1`);
+    if (r.ok) {
+      const img = (await r.json()).data?.[0]?.images?.small;
+      if (img) { el.onerror = null; el.src = img; }
+    }
+  } catch {}
 }
 
 const _logoCache = {};
