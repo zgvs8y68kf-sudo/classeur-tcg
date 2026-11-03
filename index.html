@@ -1657,15 +1657,27 @@ async function openManualDeckBuilder() {
     <p style="text-align:center;color:var(--muted);font-size:12px;margin-top:10px">💡 Sans sélection : tous types</p>`;
   }
 
+  const MDB_RANGES={pokemon:[10,20],trainer:[24,32]};
+  function catCntHtml(cnt,cat){
+    const[mn,mx]=MDB_RANGES[cat]||[0,0],lbl=cat==='pokemon'?'Pokémon':'Dresseurs';
+    const ok=cnt>=mn&&cnt<=mx,lo=cnt<mn,hi=cnt>mx;
+    const col=ok?'#22c55e':lo?'#f59e0b':'#ef4444';
+    const msg=ok?'✓ Dans la fourchette idéale':lo?`⬆ Visez au moins ${mn}`:` ⬇ Trop — max recommandé ${mx}`;
+    return `<div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:32px;font-weight:800;line-height:1;color:${col};min-width:44px;text-align:center">${cnt}</span>
+      <div>
+        <div style="font-size:14px;font-weight:700">${lbl}</div>
+        <div style="font-size:11px;color:var(--muted)">recommandé ${mn}–${mx}</div>
+        <div style="font-size:11px;color:${col};margin-top:2px">${msg}</div>
+      </div>
+    </div>`;
+  }
   function sCards(cat){
     let cc=cards(cat);
     if(mdb.search){const q=mdb.search.toLowerCase();cc=cc.filter(c=>c.name.toLowerCase().includes(q));}
-    const{total,pokemon,trainer}=dc(),rem=60-total;
-    const cnt=cat==='pokemon'?pokemon:trainer,lbl=cat==='pokemon'?'Pokémon':'Dresseurs';
-    return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span style="font-size:12px;color:var(--muted)">${rem>0?`<b style="color:var(--accent)">${rem}</b> place${rem>1?'s':''} restante${rem>1?'s':''}`:rem===0?'<b style="color:#22c55e">Deck complet !</b>':'<b style="color:#ef4444">Trop de cartes</b>'}</span>
-      <span style="font-size:13px;font-weight:700;color:${cnt>0?'var(--accent)':'var(--muted)'}">${cnt} ${lbl}</span>
-    </div>
+    const{pokemon,trainer}=dc();
+    const cnt=cat==='pokemon'?pokemon:trainer;
+    return `<div id="mdb-cat-cnt" data-cat="${cat}" style="background:var(--sunk);border-radius:14px;padding:12px 14px;margin-bottom:12px">${catCntHtml(cnt,cat)}</div>
     <input id="mdb-s" placeholder="Rechercher…" value="${esc(mdb.search)}" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);font-size:14px;margin-bottom:12px">
     ${!cc.length?`<div style="text-align:center;padding:48px 0;color:var(--muted)"><div style="font-size:48px;margin-bottom:12px">${cat==='pokemon'?'🐲':'📋'}</div><p>Aucune carte${mdb.types.length&&cat==='pokemon'?' pour ces types':''}</p></div>`:
     `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -1789,10 +1801,11 @@ async function openManualDeckBuilder() {
 
   function bump(){
     const el=overlay.querySelector('#mdb-cnt');if(!el)return;
-    const{total}=dc(),ok=total===60,ov=total>60;
+    const{total,pokemon,trainer}=dc(),ok=total===60,ov=total>60;
     el.textContent=total+'/60';
     el.style.cssText=`border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;transition:transform .15s ease;${ok?'background:#22c55e22;border:1px solid #22c55e;color:#22c55e':ov?'background:#ef444422;border:1px solid #ef4444;color:#ef4444':'background:var(--sunk);border:1px solid var(--line);color:var(--fg)'}`;
     el.style.transform='scale(1.3)';requestAnimationFrame(()=>{el.style.transform='scale(1)';});
+    const cc=overlay.querySelector('#mdb-cat-cnt');if(cc){const cat=cc.dataset.cat;cc.innerHTML=catCntHtml(cat==='pokemon'?pokemon:trainer,cat);}
   }
 
   function rb(keep){
