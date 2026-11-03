@@ -2725,19 +2725,28 @@ async function imgFb(el) {
     return;
   }
 
-  // 4. scrydex CDN — images.scrydex.com/pokemon/{scryId}/image
-  //    Certains sets ont un ID différent dans TCGdex vs scrydex → mapping par nom
+  // 4. CDN officiel Pokémon TCG (Collection Classique 30e Anniversaire)
   const n = String(parseInt(lid, 10) || lid);
   const setName = (S?.catalog?.sets?.[sid]?.name || '').toLowerCase();
-  const scrydexSid = (setName.includes('classic') && (setName.includes('30') || setName.includes('anniversaire') || setName.includes('anniversary')))
-    ? 'me55c' : sid;
-  const scryId = `${scrydexSid}-${n}`;
-  if (!s.includes("scrydex.com")) {
+  const isClassic30 = setName.includes('classic') && (setName.includes('30') || setName.includes('anniversaire') || setName.includes('anniversary'));
+  if (isClassic30 && !s.includes("cloudfront.net")) {
     el.onerror = () => imgFb(el);
-    el.src = `https://images.scrydex.com/pokemon/${scryId}/image`;
+    el.src = `https://dz3we2x72f7ol.cloudfront.net/expansions/30th-celebration/fr-fr/2M6P_Classic_FR_${n}-2x.png`;
     return;
   }
-  // 5. /image 404 → tente /small
+  if (isClassic30 && s.includes("cloudfront.net") && s.includes("/fr-fr/")) {
+    el.onerror = () => imgFb(el);
+    el.src = s.replace("/fr-fr/", "/en-us/").replace("_FR_", "_EN_");
+    return;
+  }
+  // 5. scrydex CDN
+  const scrydexSid = isClassic30 ? 'me55c' : sid;
+  if (!s.includes("scrydex.com")) {
+    el.onerror = () => imgFb(el);
+    el.src = `https://images.scrydex.com/pokemon/${scrydexSid}-${n}/image`;
+    return;
+  }
+  // 6. scrydex /image → /small
   if (s.includes("scrydex.com") && s.endsWith("/image")) {
     el.onerror = null;
     el.src = s.replace(/\/image$/, "/small");
