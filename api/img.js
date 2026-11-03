@@ -29,8 +29,8 @@ export default async function handler(req) {
     if (en !== base) urls.push(en + '/low.webp', en + '/low.png');
   }
 
-  // CDN officiel Pokémon TCG — Collection Classique 30e Anniversaire (cartes 1–30)
-  if (n) {
+  // CDN officiel Pokémon TCG — Collection Classique 30e Anniversaire uniquement (flag c=1)
+  if (n && searchParams.get('c') === '1') {
     urls.push(
       `https://dz3we2x72f7ol.cloudfront.net/expansions/30th-celebration/fr-fr/2M6P_Classic_FR_${n}-2x.png`,
       `https://dz3we2x72f7ol.cloudfront.net/expansions/30th-celebration/en-us/2M6P_Classic_EN_${n}-2x.png`
