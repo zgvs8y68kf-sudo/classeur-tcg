@@ -2687,45 +2687,12 @@ async function compressImg(file, maxPx, q) {
 const compressForGemini = f => compressImg(f, 1280, 0.90);
 const compressForPage   = f => compressImg(f, 2000, 0.88); // plus haute résolution pour 9 cartes
 
-/* Fallback image : FR→EN → .webp→.png → TCGdex EN API → pokemontcg.io direct → pokemontcg.io search */
-const _enImgCache = {};
-async function imgFb(el) {
+/* Fallback image : TCGdex FR → CDN officiel Pokémon TCG FR → EN */
+function imgFb(el) {
   el.onerror = null;
   const s = el.src || "";
-
-  // 1. URL FR → EN
-  if (s.includes("/fr/")) {
-    el.onerror = () => imgFb(el);
-    el.src = s.replace("/fr/", "/en/");
-    return;
-  }
-
-  // 2. TCGdex .webp → .png
-  if (!s.includes("pokemontcg.io")) {
-    if (s.endsWith("/low.webp"))  { el.onerror = () => imgFb(el); el.src = s.replace("/low.webp",  "/low.png");  return; }
-    if (s.endsWith("/high.webp")) { el.onerror = () => imgFb(el); el.src = s.replace("/high.webp", "/high.png"); return; }
-  }
-
   const sid = el.dataset.set, lid = el.dataset.local;
   if (!sid || !lid) return;
-  const key = `${sid}-${lid}`;
-
-  // 3. TCGdex EN API — cache {img, name} pour l'étape 5
-  if (!(key in _enImgCache)) {
-    try {
-      const r = await fetch(`https://api.tcgdex.net/v2/en/cards/${key}`);
-      if (r.ok) { const c = await r.json(); _enImgCache[key] = {img: c.image||null, name: c.name||''}; }
-      else _enImgCache[key] = null;
-    } catch { _enImgCache[key] = null; }
-  }
-  const enC = _enImgCache[key];
-  if (enC?.img && !s.startsWith(enC.img)) {
-    el.onerror = () => imgFb(el);
-    el.src = enC.img + "/low.webp";
-    return;
-  }
-
-  // 4. CDN officiel Pokémon TCG (Collection Classique 30e Anniversaire) — FR puis EN
   const n = String(parseInt(lid, 10) || lid);
   const setName = (S?.catalog?.sets?.[sid]?.name || '').toLowerCase();
   const isClassic30 = setName.includes('classic') && (setName.includes('30') || setName.includes('anniversaire') || setName.includes('anniversary'));
