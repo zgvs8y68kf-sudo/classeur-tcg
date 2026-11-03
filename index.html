@@ -2725,7 +2725,7 @@ async function imgFb(el) {
     return;
   }
 
-  // 4. CDN officiel Pokémon TCG (Collection Classique 30e Anniversaire)
+  // 4. CDN officiel Pokémon TCG (Collection Classique 30e Anniversaire) — FR puis EN
   const n = String(parseInt(lid, 10) || lid);
   const setName = (S?.catalog?.sets?.[sid]?.name || '').toLowerCase();
   const isClassic30 = setName.includes('classic') && (setName.includes('30') || setName.includes('anniversaire') || setName.includes('anniversary'));
@@ -2735,21 +2735,8 @@ async function imgFb(el) {
     return;
   }
   if (isClassic30 && s.includes("cloudfront.net") && s.includes("/fr-fr/")) {
-    el.onerror = () => imgFb(el);
-    el.src = s.replace("/fr-fr/", "/en-us/").replace("_FR_", "_EN_");
-    return;
-  }
-  // 5. scrydex CDN
-  const scrydexSid = isClassic30 ? 'me55c' : sid;
-  if (!s.includes("scrydex.com")) {
-    el.onerror = () => imgFb(el);
-    el.src = `https://images.scrydex.com/pokemon/${scrydexSid}-${n}/image`;
-    return;
-  }
-  // 6. scrydex /image → /small
-  if (s.includes("scrydex.com") && s.endsWith("/image")) {
     el.onerror = null;
-    el.src = s.replace(/\/image$/, "/small");
+    el.src = s.replace("/fr-fr/", "/en-us/").replace("_FR_", "_EN_");
   }
 }
 
