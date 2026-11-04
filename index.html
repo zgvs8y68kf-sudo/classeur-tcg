@@ -845,10 +845,8 @@ function viewHome(){
       <div class="kpi"><b>${t.paid ? eur(t.value - t.paid) : "—"}</b><span>plus-value vs payé</span></div>
     </div>
     <div class="row" style="margin-top:14px">
-      <button class="btn primary" data-act="scan">Scanner des cartes</button>
       <button class="btn" id="refresh" data-act="refresh" ${empty?"disabled":""}>Actualiser les prix</button>
       <button class="btn" data-act="export" ${empty?"disabled":""}>Exporter (CSV)</button>
-      <button class="btn" data-act="clearall" style="color:var(--accent);border-color:var(--accent)">Vider la collection</button>
     </div>
     ${lastStr ? `<p class="muted" style="font-size:12px;margin:10px 0 0">${lastStr} · Cardmarket via TCGdex${typeof Notification !== "undefined" && Notification.permission === "default" ? ` · <button class="btn" data-act="reqnotif" style="font-size:11px;padding:2px 8px;border-radius:999px;display:inline">🔔 Alertes prix</button>` : ""}</p>` : ""}
   </section>
@@ -2192,6 +2190,21 @@ function openProfile(){
       </div>` : ""}
 
       <button class="btn primary" id="prof-save" style="width:100%;margin-top:4px">Enregistrer</button>
+
+      <div style="margin-top:28px;border-top:1px solid var(--line);padding-top:16px">
+        <h3 style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--color-danger);margin:0 0 10px">Zone de danger</h3>
+        <button class="btn" id="clear-btn" style="color:var(--color-danger);border-color:var(--color-danger);width:100%;font-size:13px">🗑 Vider la collection…</button>
+        <div id="clear-step2" hidden style="margin-top:12px;background:rgba(255,59,48,.07);border:1px solid rgba(255,59,48,.25);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px">
+          <p style="font-size:14px;font-weight:600;margin:0;color:var(--color-danger)">⚠️ Action irréversible</p>
+          <p style="font-size:13px;color:var(--muted);margin:0">Cette action supprime <b style="color:var(--fg)">${Object.keys(S.coll).length} carte(s)</b> définitivement.<br>Tape <b style="color:var(--fg)">VIDER</b> pour confirmer.</p>
+          <input id="clear-input" type="text" autocomplete="off" placeholder="Tape VIDER ici…"
+            style="border:1px solid rgba(255,59,48,.4);background:var(--surface);border-radius:9px;padding:10px 12px;font-size:15px;color:var(--fg);outline:none;width:100%;box-sizing:border-box">
+          <div style="display:flex;gap:8px">
+            <button class="btn" id="clear-cancel" style="flex:1;font-size:13px">Annuler</button>
+            <button class="btn" id="clear-go" disabled style="flex:2;font-size:13px;color:var(--color-danger);border-color:var(--color-danger)">Supprimer définitivement</button>
+          </div>
+        </div>
+      </div>
     </div>`;
 
     scrim.querySelector("#prof-close").onclick = () => scrim.remove();
@@ -2210,6 +2223,23 @@ function openProfile(){
     });
     scrim.querySelectorAll("[data-act='acct']").forEach(b => b.onclick = () => { scrim.remove(); S.user ? Store.signOut() : Store.signIn(); });
     scrim.addEventListener("click", e => { if (e.target === scrim) scrim.remove(); });
+    scrim.querySelector("#clear-btn").onclick = () => {
+      scrim.querySelector("#clear-step2").hidden = false;
+      scrim.querySelector("#clear-btn").hidden = true;
+    };
+    scrim.querySelector("#clear-cancel").onclick = () => {
+      scrim.querySelector("#clear-step2").hidden = true;
+      scrim.querySelector("#clear-btn").hidden = false;
+      scrim.querySelector("#clear-input").value = "";
+      scrim.querySelector("#clear-go").disabled = true;
+    };
+    scrim.querySelector("#clear-input").oninput = e => {
+      scrim.querySelector("#clear-go").disabled = e.target.value.trim() !== "VIDER";
+    };
+    scrim.querySelector("#clear-go").onclick = () => {
+      if (scrim.querySelector("#clear-input").value.trim() !== "VIDER") return;
+      scrim.remove(); Store.clearAll();
+    };
   };
 
   renderModal();
