@@ -1,6 +1,6 @@
 export const config = { runtime: 'edge' };
 
-// Proxy image : TCGdex FR → EN → Scrydex → CDN officiel Pokémon TCG (30e anniversaire classique)
+// Proxy image : TCGdex FR → EN → site officiel Pokémon (MEP / Classic30) → Scrydex (fallback général)
 // Cache 1 an sur l'edge Vercel — plus aucune cascade d'erreurs côté client.
 export default async function handler(req) {
   const { searchParams } = new URL(req.url);
@@ -30,6 +30,14 @@ export default async function handler(req) {
     }
     urls.push(base + '/low.webp', base + '/low.png');
     if (en !== base) urls.push(en + '/low.webp', en + '/low.png');
+  }
+
+  // Site officiel Pokémon — MEP Black Star Promos (flag m=1)
+  if (n && searchParams.get('m') === '1') {
+    urls.push(
+      `https://assets.pokemon.com/static-assets/content-assets/cms2-fr-fr/img/cards/web/MEP/MEP_FR_${n}.png`,
+      `https://assets.pokemon.com/static-assets/content-assets/cms2-en-us/img/cards/web/MEP/MEP_EN_${n}.png`
+    );
   }
 
   // Scrydex — fallback général : images.scrydex.com/pokemon/{setId}-{localId}/{size}
