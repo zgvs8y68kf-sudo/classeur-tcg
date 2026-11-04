@@ -185,6 +185,8 @@ nav.tabs button{border:0;background:transparent;display:flex;flex-direction:colu
 nav.tabs button[aria-current="page"]{color:var(--accent)}
 nav.tabs svg{width:22px;height:22px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;z-index:30;font-size:14px;max-width:90%}
+.toast-new{background:var(--gold);color:#1a1200}
+@keyframes confetti-fly{0%{transform:translate(0,0) scale(1) rotate(0deg);opacity:1}80%{opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(0) rotate(540deg);opacity:0}}
 /* ── Deck builder ──────────────────────────────────────── */
 .deck-grid{display:grid;gap:10px}
 @media(min-width:640px){.deck-grid{grid-template-columns:repeat(2,1fr)}}
@@ -3281,11 +3283,12 @@ async function exportCsv(){
 }
 
 /* ---------- interactions ---------- */
-function quickAdd(id, cinfo){
+function quickAdd(id, cinfo, originEl){
   const set = S.setCache[S.lang + ":" + S.setView];
   const c = set?.cards?.find(x => x.id === id) || cinfo;
   const setId = c?.setId || S.setView || id.slice(0, id.lastIndexOf("-"));
   const prev = S.coll[id];
+  const isNew = !prev || qty(prev) === 0;
   const doc = prev
     ? {...prev, v:{...prev.v, normal:(prev.v?.normal||0)+1}, wish:false}
     : {kind:"card",cardId:id,setId,name:c?.name||"",localId:c?.localId||"",image:c?.image||"",v:{normal:1},cond:"Near Mint",wish:false,addedAt:Date.now(),lang:S.lang.toUpperCase().slice(0,2)};
@@ -3299,14 +3302,30 @@ function quickAdd(id, cinfo){
     if (total > 1) { if (!qty) { qty = document.createElement("span"); qty.className = "qty"; p.appendChild(qty); } qty.textContent = "×" + total; }
     else if (qty) qty.remove();
   });
-  toast((c?.name||"Carte") + " ×" + total);
+  if (isNew) { toastNew(c?.name||"Carte"); burstConfetti(originEl); }
+  else { toast((c?.name||"Carte") + " ×" + total); }
 }
 function toast(msg){ const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+function toastNew(name){ const t = document.createElement("div"); t.className = "toast toast-new"; t.textContent = "✨ Nouvelle ! " + name; document.body.appendChild(t); setTimeout(() => t.remove(), 3200); }
+function burstConfetti(el){
+  const r = el ? el.getBoundingClientRect() : {left:window.innerWidth/2,top:window.innerHeight/2,width:0,height:0};
+  const ox = r.left + r.width/2, oy = r.top + r.height/2;
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:9000;overflow:hidden";
+  document.body.appendChild(wrap);
+  const cols = ["#ffd36e","#3adea8","#0a84ff","#ff6bb8","#c46bff","#ffa040"];
+  for (let i = 0; i < 36; i++){
+    const p = document.createElement("div"), a = Math.random()*Math.PI*2, d = 80+Math.random()*170, s = 5+Math.random()*7;
+    p.style.cssText = `position:absolute;left:${ox}px;top:${oy}px;width:${s.toFixed(1)}px;height:${s.toFixed(1)}px;background:${cols[i%cols.length]};border-radius:${Math.random()>.5?"50%":"3px"};--dx:${(Math.cos(a)*d).toFixed(1)}px;--dy:${(Math.sin(a)*d).toFixed(1)}px;animation:confetti-fly .95s ease-out ${(Math.random()*.12).toFixed(2)}s forwards`;
+    wrap.appendChild(p);
+  }
+  setTimeout(() => wrap.remove(), 1300);
+}
 function go(tab){ S.tab = tab; window.scrollTo(0,0); render(); if (tab === "search") $("#q")?.focus(); }
 
 document.addEventListener("click", e => {
   if (e.target.closest(".scrim")) return;
-  const qa = e.target.closest("[data-quickadd]"); if (qa) { const ci = qa.dataset.qacinfo ? JSON.parse(qa.dataset.qacinfo) : null; quickAdd(qa.dataset.quickadd, ci); return; }
+  const qa = e.target.closest("[data-quickadd]"); if (qa) { const ci = qa.dataset.qacinfo ? JSON.parse(qa.dataset.qacinfo) : null; quickAdd(qa.dataset.quickadd, ci, qa); return; }
   const b = e.target.closest("button,[data-act]"); if (!b) return;
   if (b.dataset.tab) return go(b.dataset.tab);
   if (b.dataset.lang && b.dataset.lang !== S.lang) { S.lang = b.dataset.lang; lsSet("lang", S.lang); S.setCache = {}; loadCatalog(); if (S.tab === "search") { $("#app").innerHTML = viewSearch(); } return; }
@@ -3336,9 +3355,11 @@ document.addEventListener("click", e => {
   if (b.dataset.addscan) {
     const [i,k] = b.dataset.addscan.split(":").map(Number); const f = S.scan[i].found[k]; const c = f.cands[f.sel];
     const variant = $(`#var-${i}-${k}`)?.value || "normal";
+    const isNew = !S.coll[c.id] || qty(S.coll[c.id]) === 0;
     const doc = S.coll[c.id] ? {...S.coll[c.id]} : {kind:"card", cardId:c.id, setId:c.setId, name:c.name, localId:c.localId, image:c.image||"", v:{}, cond:"Near Mint", wish:false, addedAt:Date.now(), lang:(f.det.language||S.lang).toUpperCase().slice(0,2)};
     doc.v = {...doc.v, [variant]: (doc.v?.[variant]||0) + 1}; doc.wish = false; f.added = true;
-    Store.save(doc); toast(`${c.name} ajoutée (×${qty(doc)})`);
+    Store.save(doc);
+    if (isNew) { toastNew(c.name); burstConfetti(b); } else { toast(`${c.name} ajoutée (×${qty(doc)})`); }
     if (!doc.prices) loadCard(c.id).then(cd => { if (!cd?.pricing) return; const prices = {}; for (const [vk] of VARIANTS) prices[vk] = priceOf(cd.pricing, vk).main; const cur = S.coll[c.id]; if (cur) Store.save({...cur, prices, priceSource:"Cardmarket via TCGdex", priceAt:Date.now()}); }).catch(()=>{});
     return;
   }
