@@ -1,6 +1,6 @@
 export const config = { runtime: 'edge' };
 
-// Proxy image : TCGdex FR → EN → CDN officiel Pokémon TCG (30e anniversaire classique)
+// Proxy image : TCGdex FR → EN → Scrydex → CDN officiel Pokémon TCG (30e anniversaire classique)
 // Cache 1 an sur l'edge Vercel — plus aucune cascade d'erreurs côté client.
 export default async function handler(req) {
   const { searchParams } = new URL(req.url);
@@ -30,6 +30,17 @@ export default async function handler(req) {
     }
     urls.push(base + '/low.webp', base + '/low.png');
     if (en !== base) urls.push(en + '/low.webp', en + '/low.png');
+  }
+
+  // Scrydex — fallback général : images.scrydex.com/pokemon/{setId}-{localId}/{size}
+  // Le setId est extrait de la base URL (assets.tcgdex.net/{lang}/{setId}/{localId})
+  if (base) {
+    const parts = base.replace(/^https?:\/\/[^/]+/, '').split('/').filter(Boolean);
+    if (parts.length >= 2) {
+      const scardId = `${parts[parts.length - 2]}-${parts[parts.length - 1]}`;
+      if (hi) urls.push(`https://images.scrydex.com/pokemon/${scardId}/large`);
+      urls.push(`https://images.scrydex.com/pokemon/${scardId}/medium`);
+    }
   }
 
   // CDN officiel Pokémon TCG — Collection Classique 30e Anniversaire uniquement (flag c=1)

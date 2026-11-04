@@ -2690,7 +2690,7 @@ const compressForPage   = f => compressImg(f, 2000, 0.88); // plus haute résolu
 /* Proxy image via /api/img — fallbacks gérés côté serveur avec cache 1 an */
 function imgSrc(base, lid, hi, setId) {
   const n = lid ? String(parseInt(lid, 10) || lid) : '';
-  let p = 'v=2&lid=' + encodeURIComponent(n);
+  let p = 'v=3&lid=' + encodeURIComponent(n);
   if (base) p += '&base=' + encodeURIComponent(base);
   if (hi) p += '&hi=1';
   if (setId) {
