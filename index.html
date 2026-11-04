@@ -173,20 +173,17 @@ h2{font:400 14px/1 var(--display);letter-spacing:.22em;text-transform:uppercase;
 .spinner{width:18px;height:18px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:sp 0.8s linear infinite;display:inline-block;vertical-align:middle}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spinner{animation:none}}
-@media (prefers-reduced-motion:no-preference){.hero::after{animation:holo 6s linear infinite}.scan .orb{animation:holo 5s linear infinite}}
+@media (prefers-reduced-motion:no-preference){.hero::after{animation:holo 6s linear infinite}}
 @media (prefers-reduced-motion:reduce){.hp-fill{transition:width .4s ease}}
 .search{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 14px;font-size:16px}
 .note{background:var(--sunk);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--muted)}
 .empty{text-align:center;padding:28px 12px;color:var(--muted)}
 
 /* Barre d'onglets */
-nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:15;background:rgba(4,3,10,.72);backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);border-top:.5px solid rgba(255,255,255,.14);display:flex;justify-content:space-around;align-items:flex-end;padding:6px max(8px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:15;background:rgba(4,3,10,.72);backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);border-top:.5px solid rgba(255,255,255,.14);display:flex;justify-content:space-around;align-items:center;padding:6px max(8px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
 nav.tabs button{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;font-size:10px;font-weight:500;letter-spacing:.01em;color:var(--muted);min-width:44px;padding:4px 2px 2px}
 nav.tabs button[aria-current="page"]{color:var(--accent)}
 nav.tabs svg{width:22px;height:22px}
-nav.tabs .scan{transform:translateY(-14px)}
-nav.tabs .scan .orb{width:56px;height:56px;border-radius:50%;background:conic-gradient(from var(--ha),#ff6bb8,#ffd36e,#6bffb8,#6bb5ff,#c46bff,#ff6bb8);display:grid;place-items:center;box-shadow:0 4px 24px rgba(180,0,220,.5);border:3px solid var(--bg)}
-nav.tabs .scan .orb svg{width:24px;height:24px;color:#fff}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;z-index:30;font-size:14px;max-width:90%}
 /* ── Deck builder ──────────────────────────────────────── */
 .deck-grid{display:grid;gap:10px}
@@ -309,7 +306,7 @@ nav.tabs .scan .orb svg{width:24px;height:24px;color:#fff}
 <nav class="tabs" aria-label="Navigation">
   <button data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Valeur</button>
   <button data-tab="series"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="9" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Séries</button>
-  <button data-tab="scan" class="scan" aria-label="Scanner"><span class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3.2"/></svg></span></button>
+  <button data-tab="scan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3.2"/></svg>Scan</button>
   <button data-tab="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Chercher</button>
   <button data-tab="jeu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="3"/><path d="M8 12h4M10 10v4"/><circle cx="16" cy="12" r="1" fill="currentColor"/><circle cx="18" cy="10" r="1" fill="currentColor"/></svg>Decks</button>
   <button data-tab="lists"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6M10 3v7l-4 9a1 1 0 0 0 .9 1.5h10.2a1 1 0 0 0 .9-1.5L14 10V3"/><path d="M7.5 15.5h9"/></svg>Prof. Chen</button>
