@@ -887,7 +887,9 @@ function viewSeries(){
 }
 function setTile(x){
   const own = ownedInSet(x.id), tot = x.official || x.total || 0, pct = tot ? Math.min(100, own/tot*100) : 0;
-  const _lsrc = `/api/logo?sid=${encodeURIComponent(x.id)}${x.logo ? '&base=' + encodeURIComponent(x.logo) : ''}`;
+  const _nm30 = (x.name || '').toLowerCase();
+  const _a30 = _nm30.includes('anniversaire') || _nm30.includes('collection classique') || _nm30.includes('classic collection');
+  const _lsrc = `/api/logo?sid=${encodeURIComponent(x.id)}${x.logo ? '&base=' + encodeURIComponent(x.logo) : ''}${_a30 ? '&a30=1' : ''}`;
   // Gradient unique dérivé du hash de l'ID
   let h = 0; for (let i = 0; i < x.id.length; i++) h = (h * 31 + x.id.charCodeAt(i)) & 0xffffffff;
   const hu = (Math.abs(h) % 300 + 180) % 360, hu2 = (hu + 45) % 360;

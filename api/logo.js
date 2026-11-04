@@ -1,6 +1,6 @@
 export const config = { runtime: 'edge' };
 
-// Proxy logo d'extension : TCGdex FR → EN → pokemontcg.io
+// Proxy logo d'extension : TCGdex FR → EN → pokemontcg.io → CDN officiel Pokémon (30e anniversaire)
 // Cache 1 an sur l'edge Vercel.
 export default async function handler(req) {
   const { searchParams } = new URL(req.url);
@@ -28,6 +28,11 @@ export default async function handler(req) {
 
   if (sid) {
     urls.push(`https://images.pokemontcg.io/${sid}/logo.png`);
+  }
+
+  // CDN officiel Pokémon — 30e Anniversaire & Collection Classique (flag a30=1)
+  if (searchParams.get('a30') === '1') {
+    urls.push('https://d1i787aglh9bmb.cloudfront.net/assets/img/me-expansions/thirty/logo/fr-fr/Logo-30th-2x.png');
   }
 
   for (const url of urls) {
