@@ -844,11 +844,7 @@ function viewHome(){
       <div class="kpi"><b>${t.dupes}</b><span>doubles à échanger</span></div>
       <div class="kpi"><b>${t.paid ? eur(t.value - t.paid) : "—"}</b><span>plus-value vs payé</span></div>
     </div>
-    <div class="row" style="margin-top:14px">
-      <button class="btn" id="refresh" data-act="refresh" ${empty?"disabled":""}>Actualiser les prix</button>
-      <button class="btn" data-act="export" ${empty?"disabled":""}>Exporter (CSV)</button>
-    </div>
-    ${lastStr ? `<p class="muted" style="font-size:12px;margin:10px 0 0">${lastStr} · Cardmarket via TCGdex${typeof Notification !== "undefined" && Notification.permission === "default" ? ` · <button class="btn" data-act="reqnotif" style="font-size:11px;padding:2px 8px;border-radius:999px;display:inline">🔔 Alertes prix</button>` : ""}</p>` : ""}
+    ${lastStr ? `<p class="muted" style="font-size:12px;margin:10px 0 0">${lastStr} · Actualisation automatique quotidienne${typeof Notification !== "undefined" && Notification.permission === "default" ? ` · <button class="btn" data-act="reqnotif" style="font-size:11px;padding:2px 8px;border-radius:999px;display:inline">🔔 Alertes prix</button>` : ""}</p>` : ""}
   </section>
   ${empty ? `<div class="empty"><p style="font-size:16px;color:var(--fg);font-weight:600;margin:0 0 6px">Ton classeur est vide</p><p style="margin:0">Scanne une carte avec le bouton rouge, ou ouvre <b>Séries</b> pour cocher tes cartes à la main.</p></div>` : `
   ${(() => {
@@ -2192,6 +2188,14 @@ function openProfile(){
       <button class="btn primary" id="prof-save" style="width:100%;margin-top:4px">Enregistrer</button>
 
       <div style="margin-top:28px;border-top:1px solid var(--line);padding-top:16px">
+        <h3 style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:0 0 10px">Données</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
+          <button class="btn" id="prof-export" ${Object.keys(S.coll).length ? "" : "disabled"} style="font-size:13px">📤 Exporter la collection (CSV)</button>
+          <button class="btn" id="prof-refresh" ${Object.keys(S.coll).length ? "" : "disabled"} style="font-size:13px">🔄 Forcer l'actualisation des prix</button>
+          <p style="font-size:11px;color:var(--muted);margin:0">Les prix se mettent à jour automatiquement à l'ouverture de l'app si les données ont plus de 24 h.</p>
+        </div>
+      </div>
+      <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px">
         <h3 style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--color-danger);margin:0 0 10px">Zone de danger</h3>
         <button class="btn" id="clear-btn" style="color:var(--color-danger);border-color:var(--color-danger);width:100%;font-size:13px">🗑 Vider la collection…</button>
         <div id="clear-step2" hidden style="margin-top:12px;background:rgba(255,59,48,.07);border:1px solid rgba(255,59,48,.25);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px">
@@ -2223,6 +2227,12 @@ function openProfile(){
     });
     scrim.querySelectorAll("[data-act='acct']").forEach(b => b.onclick = () => { scrim.remove(); S.user ? Store.signOut() : Store.signIn(); });
     scrim.addEventListener("click", e => { if (e.target === scrim) scrim.remove(); });
+    scrim.querySelector("#prof-export").onclick = () => { scrim.remove(); exportCsv(); };
+    scrim.querySelector("#prof-refresh").onclick = async e => {
+      const btn = e.currentTarget; btn.disabled = true; btn.textContent = "Actualisation en cours…";
+      await refreshPrices(null);
+      scrim.remove();
+    };
     scrim.querySelector("#clear-btn").onclick = () => {
       scrim.querySelector("#clear-step2").hidden = false;
       scrim.querySelector("#clear-btn").hidden = true;
