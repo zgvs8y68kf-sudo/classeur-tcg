@@ -1377,8 +1377,8 @@ function addCardFromCollection(edDeck, onAdd){
         <input id="ac-q" value="${esc(q)}" placeholder="Chercher une carte…" style="flex:1;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:9px;padding:8px 12px;font-size:14px" autocomplete="off">
         <button id="ac-x" class="iconbtn">✕</button>
       </div>
-      <div style="display:flex;flex-direction:column;gap:4px;max-height:360px;overflow-y:auto">
-        ${f.slice(0,60).map(c=>`<button data-ac="${esc(c.cardId)}" style="background:none;border:1px solid var(--line);border-radius:8px;padding:7px 10px;display:flex;align-items:center;gap:8px;cursor:pointer;text-align:left;color:var(--fg);width:100%">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        ${f.map(c=>`<button data-ac="${esc(c.cardId)}" style="background:none;border:1px solid var(--line);border-radius:8px;padding:7px 10px;display:flex;align-items:center;gap:8px;cursor:pointer;text-align:left;color:var(--fg);width:100%">
           <img src="${imgSrc(c.image||'', c.localId, false, c.setId)}" style="width:30px;height:40px;object-fit:contain;border-radius:4px" loading="lazy">
           <span style="font-size:13px;flex:1;text-align:left">${esc(c.name)}</span>
           <span style="font-size:11px;color:var(--muted)">${esc(c.setId||"")}</span>
