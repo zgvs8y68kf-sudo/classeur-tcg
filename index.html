@@ -1369,33 +1369,102 @@ function deleteDeck(id){
 
 function addCardFromCollection(edDeck, onAdd){
   const sub = document.createElement("div"); sub.className = "scrim"; sub.style.zIndex = "30";
-  const allCards = Object.values(S.coll).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+  const allCards = Object.values(S.coll).filter(c=>qty(c)>0).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+
+  function getMeta(c){
+    const m = S._cardMeta?.[c.setId]?.[String(c.localId)];
+    const t = S._cardTypes?.[c.cardId];
+    return { stage:(m?.stage||t?.stage||"").toLowerCase(), evo:m?.evo||t?.evo||"" };
+  }
+
+  function buildChains(cards){
+    const used = new Set();
+    const chains = [];
+    // Roots : cartes sans evolveFrom connu
+    for (const c of cards){
+      if (used.has(c.cardId)) continue;
+      const {evo} = getMeta(c);
+      if (evo) continue;
+      used.add(c.cardId);
+      const chain = [c];
+      // Stage 1 qui évolue depuis c
+      for (const c2 of cards){
+        if (used.has(c2.cardId)) continue;
+        if (normStr(getMeta(c2).evo) !== normStr(c.name)) continue;
+        used.add(c2.cardId);
+        chain.push(c2);
+        // Stage 2 qui évolue depuis c2
+        for (const c3 of cards){
+          if (used.has(c3.cardId)) continue;
+          if (normStr(getMeta(c3).evo) !== normStr(c2.name)) continue;
+          used.add(c3.cardId);
+          chain.push(c3);
+        }
+      }
+      chains.push(chain);
+    }
+    // Orphelins (evolveFrom connu mais base non possédée)
+    for (const c of cards){ if (!used.has(c.cardId)){ chains.push([c]); used.add(c.cardId); } }
+    return chains;
+  }
+
+  function canAdd(c){
+    const {evo} = getMeta(c);
+    if (!evo) return true;
+    return edDeck.cards.some(dc=>normStr(dc.name)===normStr(evo));
+  }
+
   function buildPicker(q=""){
     const f = q ? allCards.filter(c=>(c.name||"").toLowerCase().includes(q.toLowerCase())) : allCards;
-    sub.innerHTML = `<div class="sheet" style="max-height:90%;overflow-y:auto;padding:16px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <input id="ac-q" value="${esc(q)}" placeholder="Chercher une carte…" style="flex:1;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:9px;padding:8px 12px;font-size:14px" autocomplete="off">
+    const chains = buildChains(f);
+
+    const rows = chains.map(chain => {
+      if (chain.length === 1){
+        const c = chain[0], ok = canAdd(c), inDeck = edDeck.cards.find(dc=>dc.cardId===c.cardId);
+        const {stage} = getMeta(c);
+        return `<button data-ac="${esc(c.cardId)}" ${ok?"":"disabled"} style="background:none;border:1px solid var(--line);border-radius:8px;padding:7px 10px;display:flex;align-items:center;gap:8px;cursor:${ok?"pointer":"not-allowed"};opacity:${ok?1:.4};color:var(--fg);width:100%;box-sizing:border-box;text-align:left">
+          <img src="${imgSrc(c.image||'',c.localId,false,c.setId)}" style="width:28px;height:40px;object-fit:contain;border-radius:3px;flex:none" loading="lazy">
+          <span style="font-size:13px;flex:1">${esc(c.name)}</span>
+          ${inDeck?`<span style="font-size:11px;color:var(--accent);font-weight:700">${inDeck.qty}×</span>`:""}
+          <span style="font-size:10px;color:var(--muted)">${esc(stage||c.setId||"")}</span>
+        </button>`;
+      }
+      // Chaîne d'évolution côte à côte
+      return `<div style="border:1px solid var(--line);border-radius:10px;padding:7px;display:flex;align-items:center;gap:3px">
+        ${chain.map((c,idx)=>{
+          const ok=canAdd(c), inDeck=edDeck.cards.find(dc=>dc.cardId===c.cardId), {stage}=getMeta(c);
+          return (idx>0?`<span style="color:var(--muted);font-size:12px;flex:none;padding:0 1px">›</span>`:"")
+            +`<button data-ac="${esc(c.cardId)}" ${ok?"":"disabled"} title="${esc(c.name)}${ok?"":" — ajoute d\'abord l\'évolution précédente"}" style="flex:1;min-width:0;background:${inDeck?"var(--surface)":"none"};border:1px solid ${inDeck?"var(--accent)":"var(--line)"};border-radius:8px;padding:5px 3px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:${ok?"pointer":"not-allowed"};opacity:${ok?1:.35}">
+              <img src="${imgSrc(c.image||'',c.localId,false,c.setId)}" style="width:40px;height:55px;object-fit:contain;border-radius:4px" loading="lazy">
+              <span style="font-size:9px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:64px;color:var(--fg)">${esc(c.name)}</span>
+              ${inDeck?`<span style="font-size:9px;color:var(--accent);font-weight:700">${inDeck.qty}×</span>`:`<span style="font-size:8px;color:var(--muted)">${esc(stage)}</span>`}
+            </button>`;
+        }).join("")}
+      </div>`;
+    });
+
+    sub.innerHTML = `<div class="sheet" style="max-height:92%;display:flex;flex-direction:column;padding:0;overflow:hidden">
+      <div style="padding:14px 14px 10px;flex-shrink:0;display:flex;align-items:center;gap:8px;border-bottom:.5px solid var(--line)">
+        <input id="ac-q" value="${esc(q)}" placeholder="Chercher…" style="flex:1;border:1px solid var(--line);background:var(--sunk);color:var(--fg);border-radius:9px;padding:8px 12px;font-size:14px" autocomplete="off">
         <button id="ac-x" class="iconbtn">✕</button>
       </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        ${f.map(c=>`<button data-ac="${esc(c.cardId)}" style="background:none;border:1px solid var(--line);border-radius:8px;padding:7px 10px;display:flex;align-items:center;gap:8px;cursor:pointer;text-align:left;color:var(--fg);width:100%">
-          <img src="${imgSrc(c.image||'', c.localId, false, c.setId)}" style="width:30px;height:40px;object-fit:contain;border-radius:4px" loading="lazy">
-          <span style="font-size:13px;flex:1;text-align:left">${esc(c.name)}</span>
-          <span style="font-size:11px;color:var(--muted)">${esc(c.setId||"")}</span>
-        </button>`).join("")}
+      <div style="overflow-y:auto;flex:1;padding:8px 10px 16px;display:flex;flex-direction:column;gap:5px">
+        ${rows.length?rows.join(""):`<p class="muted" style="font-size:13px;padding:8px">Aucune carte.</p>`}
       </div>
     </div>`;
+
     sub.querySelector("#ac-x").onclick = () => sub.remove();
     sub.querySelector("#ac-q").addEventListener("input", e => buildPicker(e.target.value));
-    if (q) { const inp = sub.querySelector("#ac-q"); if (inp) { inp.focus(); inp.setSelectionRange(q.length, q.length); } }
+    if (q){ const inp=sub.querySelector("#ac-q"); if(inp){inp.focus();inp.setSelectionRange(q.length,q.length);} }
     sub.querySelectorAll("[data-ac]").forEach(btn => btn.onclick = () => {
       const card = S.coll[btn.dataset.ac]; if (!card) return;
       const existing = edDeck.cards.find(c=>c.cardId===card.cardId);
-      if (existing) existing.qty = Math.min(4, (existing.qty||1)+1);
-      else edDeck.cards.push({cardId:card.cardId, name:card.name, image:card.image||"", qty:1});
+      if (existing) existing.qty = Math.min(4,(existing.qty||1)+1);
+      else edDeck.cards.push({cardId:card.cardId,name:card.name,image:card.image||"",qty:1});
       onAdd(); sub.remove();
     });
   }
+
   buildPicker();
   sub.addEventListener("click", e => { if (e.target===sub) sub.remove(); });
   document.body.appendChild(sub);
@@ -1568,7 +1637,7 @@ async function openManualDeckBuilder() {
     if (S._cardMeta[sid]) return;
     try {
       const data = await j(`${API}/fr/sets/${sid}`);
-      if (data?.cards) { S._cardMeta[sid]={}; for(const c of data.cards) S._cardMeta[sid][String(c.localId)]={cat:c.category||'',types:c.types||[],stage:(c.stage||'').toLowerCase(),hp:parseInt(c.hp)||0}; }
+      if (data?.cards) { S._cardMeta[sid]={}; for(const c of data.cards) S._cardMeta[sid][String(c.localId)]={cat:c.category||'',types:c.types||[],stage:(c.stage||'').toLowerCase(),hp:parseInt(c.hp)||0,evo:c.evolveFrom||''}; }
     } catch {}
   }));
 
@@ -1586,7 +1655,7 @@ async function openManualDeckBuilder() {
       await Promise.allSettled(needT.slice(i,i+CONC).map(async d=>{
         try{
           const c=await j(`${API}/fr/cards/${d.cardId}`);
-          if(c) S._cardTypes[d.cardId]={types:c.types||[],stage:(c.stage||'').toLowerCase(),hp:parseInt(c.hp)||0,cat:c.category||''};
+          if(c) S._cardTypes[d.cardId]={types:c.types||[],stage:(c.stage||'').toLowerCase(),hp:parseInt(c.hp)||0,cat:c.category||'',evo:c.evolveFrom||''};
         }catch{}
       }));
     }
